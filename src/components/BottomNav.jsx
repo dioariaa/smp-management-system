@@ -1,60 +1,86 @@
 import React from 'react'
-import { LayoutDashboard, Users, FileText, Calendar, Bell, TrendingUp } from 'lucide-react'
-import { useAuthStore } from '../store/authStore'
 import { useNavigate, useLocation } from 'react-router-dom'
+import { useAuthStore } from '../store/authStore'
+import {
+  LayoutDashboard,
+  Users,
+  BookOpen,
+  Calendar,
+  FileText,
+  Bell,
+  TrendingUp
+} from 'lucide-react'
 
 const BottomNav = () => {
   const { role } = useAuthStore()
   const navigate = useNavigate()
   const location = useLocation()
 
-  const navItems = {
+  // Definisi menu per-role
+  const menuByRole = {
+    admin: [
+      { label: 'Dashboard', icon: LayoutDashboard, path: '/admin' },
+      { label: 'Guru', icon: Users, path: '/admin/guru' },
+      { label: 'Siswa', icon: Users, path: '/admin/siswa' },
+      { label: 'Kelas', icon: BookOpen, path: '/admin/kelas' },
+      { label: 'Jadwal', icon: Calendar, path: '/admin/jadwal' },
+      { label: 'Nilai', icon: FileText, path: '/admin/nilai' },
+      { label: 'Info', icon: Bell, path: '/admin/pengumuman' },
+    ],
     guru: [
-      { icon: LayoutDashboard, label: 'Dashboard', path: '/guru' },
-      { icon: Users, label: 'Kelas', path: '/guru/kelas' },
-      { icon: FileText, label: 'Nilai', path: '/guru/nilai' },
-      { icon: Calendar, label: 'Absensi', path: '/guru/absensi' },
-      { icon: Bell, label: 'Info', path: '/guru/pengumuman' },
+      { label: 'Dashboard', icon: LayoutDashboard, path: '/guru' },
+      { label: 'Kelas', icon: Users, path: '/guru/kelas' },
+      { label: 'Nilai', icon: FileText, path: '/guru/nilai' },
+      { label: 'Absensi', icon: Calendar, path: '/guru/absensi' },
+      { label: 'Jadwal', icon: Calendar, path: '/guru/jadwal' },
+      { label: 'Info', icon: Bell, path: '/guru/pengumuman' },
     ],
     siswa: [
-      { icon: LayoutDashboard, label: 'Dashboard', path: '/siswa' },
-      { icon: Calendar, label: 'Jadwal', path: '/siswa/jadwal' },
-      { icon: TrendingUp, label: 'Nilai', path: '/siswa/nilai' },
-      { icon: Calendar, label: 'Absensi', path: '/siswa/absensi' },
-      { icon: Bell, label: 'Info', path: '/siswa/pengumuman' },
+      { label: 'Dashboard', icon: LayoutDashboard, path: '/siswa' },
+      { label: 'Jadwal', icon: Calendar, path: '/siswa/jadwal' },
+      { label: 'Nilai', icon: TrendingUp, path: '/siswa/nilai' },
+      { label: 'Absensi', icon: Calendar, path: '/siswa/absensi' },
+      { label: 'Info', icon: Bell, path: '/siswa/pengumuman' },
     ],
     ortu: [
-      { icon: LayoutDashboard, label: 'Dashboard', path: '/ortu' },
-      { icon: TrendingUp, label: 'Nilai', path: '/ortu/nilai' },
-      { icon: Calendar, label: 'Absensi', path: '/ortu/absensi' },
-      { icon: Bell, label: 'Info', path: '/ortu/pengumuman' },
-    ]
+      { label: 'Dashboard', icon: LayoutDashboard, path: '/ortu' },
+      { label: 'Nilai', icon: TrendingUp, path: '/ortu/nilai' },
+      { label: 'Absensi', icon: Calendar, path: '/ortu/absensi' },
+      { label: 'Info', icon: Bell, path: '/ortu/pengumuman' },
+    ],
   }
 
-  const currentNav = navItems[role] || []
+  const items = menuByRole[role] || []
 
-  if (role === 'admin') {
-    return null // Admin doesn't need bottom nav on desktop
-  }
+  if (!items.length) return null
 
   return (
-    <div className="flex items-center justify-around py-3 bg-white border-t border-gray-200">
-      {currentNav.map((item) => {
-        const isActive = location.pathname === item.path
-        return (
-          <button
-            key={item.path}
-            onClick={() => navigate(item.path)}
-            className={`flex flex-col items-center space-y-1 p-2 rounded-lg transition-colors min-w-[60px] ${
-              isActive ? 'text-blue-600' : 'text-gray-600'
-            }`}
-          >
-            <item.icon size={20} />
-            <span className="text-xs font-medium">{item.label}</span>
-          </button>
-        )
-      })}
-    </div>
+    <nav className="w-full max-w-full overflow-x-auto">
+      <div className="flex justify-between px-2 py-1">
+        {items.map((item) => {
+          const isActive = location.pathname === item.path
+          const Icon = item.icon
+
+          return (
+            <button
+              key={item.path}
+              onClick={() => navigate(item.path)}
+              className={`flex flex-col items-center flex-1 mx-1 py-1 rounded-lg text-[11px] ${
+                isActive
+                  ? 'text-blue-600 bg-blue-50'
+                  : 'text-gray-500'
+              }`}
+            >
+              <Icon
+                size={18}
+                className={isActive ? 'mb-0.5' : 'mb-0.5'}
+              />
+              <span className="leading-tight">{item.label}</span>
+            </button>
+          )
+        })}
+      </div>
+    </nav>
   )
 }
 

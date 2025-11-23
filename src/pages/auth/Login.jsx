@@ -104,12 +104,7 @@ const Login = () => {
           </button>
         </form>
 
-        <p className="text-center text-gray-600 mt-6">
-          Orang tua?{' '}
-          <a href="/register" className="text-blue-600 hover:text-blue-700 font-medium">
-            Daftar di sini
-          </a>
-        </p>
+       
       </motion.div>
     </div>
   )
