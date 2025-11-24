@@ -70,22 +70,37 @@ export async function fetchStudentsInClass(kelasId) {
 // ===============================
 // Ambil absensi terbaru untuk dashboard guru
 // ===============================
-export async function fetchRecentAbsensi(guruId) {
-  const { data, error } = await supabase
-    .from('attendance')
-    .select(`
-      id,
-      tanggal,
-      status,
-      kelas:kelas_id(nama)
-    `)
-    .eq('guru_id', guruId)
-    .order('tanggal', { ascending: false })
-    .limit(5)
+// src/services/guruService.js
 
-  if (error) console.error('fetchRecentAbsensi error:', error)
-  return data || []
+export async function fetchRecentAbsensi(guruId) {
+  try {
+    const { data, error } = await supabase
+      .from('attendance')
+      .select(`
+        id,
+        date,
+        status,
+        kelas:kelas_id (
+          id,
+          nama
+        )
+      `)
+      .eq('guru_id', guruId)
+      .order('date', { ascending: false })
+      .limit(5)
+
+    if (error) {
+      console.error('fetchRecentAbsensi error:', error)
+      throw error
+    }
+
+    return data || []
+  } catch (err) {
+    console.error('fetchRecentAbsensi error:', err)
+    return []
+  }
 }
+
 
 
 // ===============================
