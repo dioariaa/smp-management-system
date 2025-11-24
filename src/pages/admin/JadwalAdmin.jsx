@@ -24,6 +24,7 @@ const JadwalAdmin = () => {
     ruangan: ''
   })
 
+  const [editingId, setEditingId] = useState(null) // null = mode tambah
   const [error, setError] = useState(null)
 
   const classMap = useMemo(() => {
@@ -46,7 +47,7 @@ const JadwalAdmin = () => {
   }, [gurus])
 
   useEffect(() => {
-    const load = async () => {
+    const loadAll = async () => {
       try {
         setLoading(true)
         setError(null)
@@ -70,7 +71,7 @@ const JadwalAdmin = () => {
         setGurus(guruRows || [])
 
         // 3. Jadwal
-        await loadJadwal()
+        await reloadJadwal()
       } catch (err) {
         console.error('JadwalAdmin load error:', err)
         setError(err.message || 'Gagal memuat data jadwal.')
@@ -79,34 +80,7 @@ const JadwalAdmin = () => {
       }
     }
 
-    const loadJadwal = async () => {
-      const { data, error } = await supabase
-        .from('jadwal')
-        .select(`
-          id,
-          hari,
-          jam_mulai,
-          jam_selesai,
-          mapel,
-          ruangan,
-          kelas:kelas_id ( id, nama ),
-          guru:guru_id ( id, first_name, last_name )
-        `)
-        .order('hari', { ascending: true })
-        .order('jam_mulai', { ascending: true })
-
-      if (error) {
-        console.error('loadJadwal error:', error)
-        throw error
-      }
-
-      setJadwal(data || [])
-    }
-
-    // expose loadJadwal to outer scope
-    JadwalAdmin.loadJadwal = loadJadwal
-
-    load()
+    loadAll()
   }, [])
 
   const reloadJadwal = async () => {
@@ -145,6 +119,19 @@ const JadwalAdmin = () => {
     }))
   }
 
+  const resetForm = () => {
+    setForm({
+      kelas_id: '',
+      guru_id: '',
+      mapel: '',
+      hari: 'Senin',
+      jam_mulai: '',
+      jam_selesai: '',
+      ruangan: ''
+    })
+    setEditingId(null)
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (!form.kelas_id || !form.guru_id || !form.mapel || !form.jam_mulai || !form.jam_selesai) {
@@ -154,6 +141,7 @@ const JadwalAdmin = () => {
 
     try {
       setSaving(true)
+
       const payload = {
         kelas_id: form.kelas_id,
         guru_id: form.guru_id,
@@ -164,30 +152,76 @@ const JadwalAdmin = () => {
         ruangan: form.ruangan || null
       }
 
-      const { error } = await supabase
-        .from('jadwal')
-        .insert(payload)
+      if (editingId) {
+        // UPDATE
+        const { error } = await supabase
+          .from('jadwal')
+          .update(payload)
+          .eq('id', editingId)
 
-      if (error) {
-        console.error('Insert jadwal error:', error)
-        throw error
+        if (error) {
+          console.error('Update jadwal error:', error)
+          throw error
+        }
+
+        toast.success('Jadwal berhasil diperbarui.')
+      } else {
+        // INSERT
+        const { error } = await supabase
+          .from('jadwal')
+          .insert(payload)
+
+        if (error) {
+          console.error('Insert jadwal error:', error)
+          throw error
+        }
+
+        toast.success('Jadwal berhasil ditambahkan.')
       }
 
-      toast.success('Jadwal berhasil ditambahkan.')
-      setForm((prev) => ({
-        ...prev,
-        mapel: '',
-        jam_mulai: '',
-        jam_selesai: '',
-        ruangan: ''
-      }))
-
+      resetForm()
       await reloadJadwal()
     } catch (err) {
       console.error('handleSubmit error:', err)
-      toast.error('Gagal menambahkan jadwal.')
+      toast.error('Gagal menyimpan jadwal.')
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleEditClick = (row) => {
+    setEditingId(row.id)
+    setForm({
+      kelas_id: row.kelas?.id || row.kelas_id || '',
+      guru_id: row.guru?.id || row.guru_id || '',
+      mapel: row.mapel || '',
+      hari: row.hari || 'Senin',
+      jam_mulai: (row.jam_mulai || '').slice(0, 5),
+      jam_selesai: (row.jam_selesai || '').slice(0, 5),
+      ruangan: row.ruangan || ''
+    })
+  }
+
+  const handleDeleteClick = async (id) => {
+    const ok = window.confirm('Yakin ingin menghapus jadwal ini?')
+    if (!ok) return
+
+    try {
+      const { error } = await supabase
+        .from('jadwal')
+        .delete()
+        .eq('id', id)
+
+      if (error) {
+        console.error('Delete jadwal error:', error)
+        throw error
+      }
+
+      toast.success('Jadwal berhasil dihapus.')
+      await reloadJadwal()
+    } catch (err) {
+      console.error('handleDeleteClick error:', err)
+      toast.error('Gagal menghapus jadwal.')
     }
   }
 
@@ -206,7 +240,7 @@ const JadwalAdmin = () => {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Manajemen Jadwal</h1>
           <p className="text-gray-600 mt-1">
-            Tambah dan kelola jadwal pelajaran untuk setiap kelas dan guru.
+            Tambah, ubah, dan hapus jadwal pelajaran untuk setiap kelas dan guru.
           </p>
         </div>
       </motion.div>
@@ -217,15 +251,26 @@ const JadwalAdmin = () => {
         </div>
       )}
 
-      {/* Form Tambah Jadwal */}
+      {/* Form Tambah / Edit Jadwal */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         className="bg-white rounded-xl shadow-sm p-4 space-y-4"
       >
-        <h2 className="text-sm font-semibold text-gray-900">
-          Tambah Jadwal Baru
-        </h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-gray-900">
+            {editingId ? 'Edit Jadwal' : 'Tambah Jadwal Baru'}
+          </h2>
+          {editingId && (
+            <button
+              type="button"
+              onClick={resetForm}
+              className="text-xs text-gray-500 hover:text-gray-700 underline"
+            >
+              Batal edit
+            </button>
+          )}
+        </div>
 
         <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {/* Kelas */}
@@ -345,7 +390,9 @@ const JadwalAdmin = () => {
               disabled={saving}
               className="px-4 py-2 rounded-lg text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60"
             >
-              {saving ? 'Menyimpan...' : 'Tambah Jadwal'}
+              {saving
+                ? (editingId ? 'Menyimpan perubahan...' : 'Menyimpan...')
+                : (editingId ? 'Update Jadwal' : 'Tambah Jadwal')}
             </button>
           </div>
         </form>
@@ -376,6 +423,7 @@ const JadwalAdmin = () => {
                   <th className="text-left py-2 px-3">Guru</th>
                   <th className="text-left py-2 px-3">Jam</th>
                   <th className="text-left py-2 px-3">Ruangan</th>
+                  <th className="text-left py-2 px-3">Aksi</th>
                 </tr>
               </thead>
               <tbody>
@@ -396,6 +444,22 @@ const JadwalAdmin = () => {
                       {(j.jam_selesai || '').slice(0, 5)}
                     </td>
                     <td className="py-2 px-3">{j.ruangan || '-'}</td>
+                    <td className="py-2 px-3 space-x-2">
+                      <button
+                        type="button"
+                        onClick={() => handleEditClick(j)}
+                        className="text-xs px-2 py-1 rounded bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteClick(j.id)}
+                        className="text-xs px-2 py-1 rounded bg-red-100 text-red-700 hover:bg-red-200"
+                      >
+                        Hapus
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
