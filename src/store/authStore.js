@@ -2,7 +2,7 @@
 import { create } from 'zustand'
 import { supabase } from '../supabase/supabaseClient'
 
-// Helper untuk ambil profil sesuai role
+// Helper: ambil profil sesuai role
 const fetchProfileByRole = async (role, userId) => {
   if (!role || !userId) return null
 
@@ -40,18 +40,19 @@ export const useAuthStore = create((set, get) => ({
   // =========================================
   login: async (identifier, password, loginMethod = 'email') => {
     try {
-      let email = identifier?.trim()
-
-      if (!identifier || !password) {
+      const trimmedIdentifier = identifier?.trim()
+      if (!trimmedIdentifier || !password) {
         throw new Error('Identifier dan password wajib diisi')
       }
+
+      let email = trimmedIdentifier
 
       // Map loginMethod -> email
       if (loginMethod === 'nip') {
         const { data: guru, error } = await supabase
           .from('gurus')
           .select('email')
-          .eq('nip', identifier)
+          .eq('nip', trimmedIdentifier)
           .single()
 
         if (error || !guru || !guru.email) {
@@ -62,7 +63,7 @@ export const useAuthStore = create((set, get) => ({
         const { data: siswa, error } = await supabase
           .from('siswas')
           .select('email')
-          .eq('nisn', identifier)
+          .eq('nisn', trimmedIdentifier)
           .single()
 
         if (error || !siswa || !siswa.email) {
@@ -119,141 +120,151 @@ export const useAuthStore = create((set, get) => ({
   },
 
   // =========================================
-  // REGISTER GURU (pakai NIP)
+  // REGISTER GURU (pakai NIP yang sudah ada di tabel gurus)
   // =========================================
   registerGuru: async ({ nip, email, password }) => {
-    try {
-      if (!nip || !email || !password) {
-        throw new Error('NIP, email, dan password wajib diisi')
-      }
+  try {
+    const cleanNip = nip?.trim()
+    const cleanEmail = email?.trim().toLowerCase()
+    const cleanPassword = password
 
-      // Pastikan guru sudah diinput admin dan belum punya akun
-      const { data: guru, error: guruError } = await supabase
-        .from('gurus')
-        .select('id, user_id')
-        .eq('nip', nip)
-        .single()
+    if (!cleanNip || !cleanEmail || !cleanPassword) {
+      throw new Error('NIP, email, dan password wajib diisi')
+    }
 
-      if (guruError || !guru) {
-        throw new Error('Guru dengan NIP tersebut tidak ditemukan. Minta admin untuk mendaftarkan data guru dulu.')
-      }
+    // Pastikan guru sudah diinput admin dan belum punya akun
+    const { data: guru, error: guruError } = await supabase
+      .from('gurus')
+      .select('id, user_id')
+      .eq('nip', cleanNip)
+      .single()
 
-      if (guru.user_id) {
-        throw new Error('Akun untuk NIP ini sudah pernah dibuat.')
-      }
+    if (guruError || !guru) {
+      throw new Error(
+        'Guru dengan NIP tersebut tidak ditemukan. Minta admin untuk mendaftarkan data guru dulu.'
+      )
+    }
 
-      // Buat akun auth
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email,
-        password
+    if (guru.user_id) {
+      throw new Error('Akun untuk NIP ini sudah pernah dibuat.')
+    }
+
+    // Buat akun auth
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      email: cleanEmail,
+      password: cleanPassword
+    })
+
+    if (authError) throw authError
+    if (!authData.user) {
+      throw new Error('Gagal membuat akun pengguna.')
+    }
+
+    const authUserId = authData.user.id
+
+    // Insert ke tabel users
+    const { error: userError } = await supabase
+      .from('users')
+      .insert({
+        id: authUserId,
+        email: cleanEmail,
+        role: 'guru',
+        status: 'active'
       })
 
-      if (authError) throw authError
-      if (!authData.user) {
-        throw new Error('Gagal membuat akun pengguna.')
-      }
+    if (userError) throw userError
 
-      const authUserId = authData.user.id
+    // Update tabel gurus: hubungkan user_id + sync email
+    const { error: linkError } = await supabase
+      .from('gurus')
+      .update({
+        user_id: authUserId,
+        email: cleanEmail
+      })
+      .eq('id', guru.id)
 
-      // Insert ke tabel users
-      const { error: userError } = await supabase
-        .from('users')
-        .insert({
-          id: authUserId,
-          email,
-          role: 'guru',
-          status: 'active'
-        })
+    if (linkError) throw linkError
 
-      if (userError) throw userError
+    return { success: true }
+  } catch (error) {
+    console.error('Register guru error:', error)
+    return { success: false, error: error.message }
+  }
+},
 
-      // Update tabel gurus: hubungkan user_id + sync email
-      const { error: linkError } = await supabase
-        .from('gurus')
-        .update({
-          user_id: authUserId,
-          email
-        })
-        .eq('id', guru.id)
-
-      if (linkError) throw linkError
-
-      return { success: true }
-    } catch (error) {
-      console.error('Register guru error:', error)
-      return { success: false, error: error.message }
-    }
-  },
 
   // =========================================
-  // REGISTER SISWA (pakai NISN)
+  // REGISTER SISWA (pakai NISN yang sudah ada di tabel siswas)
   // =========================================
   registerSiswa: async ({ nisn, email, password }) => {
-    try {
-      if (!nisn || !email || !password) {
-        throw new Error('NISN, email, dan password wajib diisi')
-      }
+  try {
+    const cleanNisn = nisn?.trim()
+    const cleanEmail = email?.trim().toLowerCase()
+    const cleanPassword = password
 
-      // Pastikan siswa sudah diinput admin dan belum punya akun
-      const { data: siswa, error: siswaError } = await supabase
-        .from('siswas')
-        .select('id, user_id')
-        .eq('nisn', nisn)
-        .single()
+    if (!cleanNisn || !cleanEmail || !cleanPassword) {
+      throw new Error('NISN, email, dan password wajib diisi')
+    }
 
-      if (siswaError || !siswa) {
-        throw new Error('Siswa dengan NISN tersebut tidak ditemukan. Minta admin untuk mendaftarkan data siswa dulu.')
-      }
+    const { data: siswa, error: siswaError } = await supabase
+      .from('siswas')
+      .select('id, user_id')
+      .eq('nisn', cleanNisn)
+      .single()
 
-      if (siswa.user_id) {
-        throw new Error('Akun untuk NISN ini sudah pernah dibuat.')
-      }
+    if (siswaError || !siswa) {
+      throw new Error(
+        'Siswa dengan NISN tersebut tidak ditemukan. Minta admin untuk mendaftarkan data siswa dulu.'
+      )
+    }
 
-      // Buat akun auth
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email,
-        password
+    if (siswa.user_id) {
+      throw new Error('Akun untuk NISN ini sudah pernah dibuat.')
+    }
+
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      email: cleanEmail,
+      password: cleanPassword
+    })
+
+    if (authError) throw authError
+    if (!authData.user) {
+      throw new Error('Gagal membuat akun pengguna.')
+    }
+
+    const authUserId = authData.user.id
+
+    const { error: userError } = await supabase
+      .from('users')
+      .insert({
+        id: authUserId,
+        email: cleanEmail,
+        role: 'siswa',
+        status: 'active'
       })
 
-      if (authError) throw authError
-      if (!authData.user) {
-        throw new Error('Gagal membuat akun pengguna.')
-      }
+    if (userError) throw userError
 
-      const authUserId = authData.user.id
+    const { error: linkError } = await supabase
+      .from('siswas')
+      .update({
+        user_id: authUserId,
+        email: cleanEmail
+      })
+      .eq('id', siswa.id)
 
-      // Insert ke tabel users
-      const { error: userError } = await supabase
-        .from('users')
-        .insert({
-          id: authUserId,
-          email,
-          role: 'siswa',
-          status: 'active'
-        })
+    if (linkError) throw linkError
 
-      if (userError) throw userError
+    return { success: true }
+  } catch (error) {
+    console.error('Register siswa error:', error)
+    return { success: false, error: error.message }
+  }
+},
 
-      // Update tabel siswas: hubungkan user_id + sync email
-      const { error: linkError } = await supabase
-        .from('siswas')
-        .update({
-          user_id: authUserId,
-          email
-        })
-        .eq('id', siswa.id)
-
-      if (linkError) throw linkError
-
-      return { success: true }
-    } catch (error) {
-      console.error('Register siswa error:', error)
-      return { success: false, error: error.message }
-    }
-  },
 
   // =========================================
-  // REGISTER ORTU (flow lama, pakai NISN anak)
+  // REGISTER ORTU (opsional, flow lama: pakai NISN anak)
   // =========================================
   registerOrtu: async (formData) => {
     try {
@@ -271,7 +282,7 @@ export const useAuthStore = create((set, get) => ({
       // Create auth user (Supabase akan hash password sendiri)
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: formData.email,
-        password: formData.password,
+        password: formData.password
       })
 
       if (authError) throw authError
@@ -335,7 +346,7 @@ export const useAuthStore = create((set, get) => ({
   },
 
   // =========================================
-  // CHECK AUTH (dipakai App.jsx)
+  // CHECK AUTH (dipakai di App.jsx saat pertama load)
   // =========================================
   checkAuth: async () => {
     try {
@@ -344,30 +355,36 @@ export const useAuthStore = create((set, get) => ({
         console.error('Session error:', sessionError)
       }
 
-      if (session?.user) {
-        const { data: userData, error: userError } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', session.user.id)
-          .single()
-
-        if (userError || !userData) {
-          console.error('User data not found:', userError)
-          set({ isLoading: false })
-          return
-        }
-
-        const profileData = await fetchProfileByRole(userData.role, session.user.id)
-
-        set({
-          user: session.user,
-          profile: profileData,
-          role: userData.role
-        })
+      if (!session?.user) {
+        // Tidak ada session
+        set({ user: null, profile: null, role: null, isLoading: false })
+        return
       }
+
+      const userId = session.user.id
+
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', userId)
+        .single()
+
+      if (userError || !userData) {
+        console.error('User data not found:', userError)
+        set({ user: null, profile: null, role: null, isLoading: false })
+        return
+      }
+
+      const profileData = await fetchProfileByRole(userData.role, userId)
+
+      set({
+        user: session.user,
+        profile: profileData,
+        role: userData.role,
+        isLoading: false
+      })
     } catch (error) {
       console.error('Auth check error:', error)
-    } finally {
       set({ isLoading: false })
     }
   },
@@ -378,6 +395,10 @@ export const useAuthStore = create((set, get) => ({
   completeOnboarding: async (formData) => {
     const { role, user } = get()
     try {
+      if (!user) {
+        throw new Error('User tidak terautentikasi')
+      }
+
       if (role === 'guru') {
         const { error } = await supabase
           .from('gurus')
