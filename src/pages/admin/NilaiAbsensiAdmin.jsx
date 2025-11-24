@@ -2,17 +2,43 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import { supabase } from '../../supabase/supabaseClient'
 import LoadingSpinner from '../../components/LoadingSpinner'
+import { Search } from 'lucide-react'
+
+const TIPE_OPTIONS = [
+  { value: '', label: 'Semua Tipe' },
+  { value: 'tugas_harian', label: 'Tugas Harian' },
+  { value: 'uts', label: 'UTS' },
+  { value: 'uas', label: 'UAS' },
+]
+
+const TIPE_LABEL = {
+  tugas_harian: 'Tugas Harian',
+  uts: 'UTS',
+  uas: 'UAS',
+}
+
+const STATUS_PRIORITY = {
+  alpa: 3,
+  sakit: 2,
+  izin: 1,
+  hadir: 0,
+}
 
 const NilaiAbsensiAdmin = () => {
-  const [gradesRaw, setGradesRaw] = useState([])
-  const [attendanceRaw, setAttendanceRaw] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
-  // filters
-  const [selectedClass, setSelectedClass] = useState('all')
+  const [classes, setClasses] = useState([])
+  const [selectedClass, setSelectedClass] = useState('')
+  const [selectedTipe, setSelectedTipe] = useState('')
   const [searchName, setSearchName] = useState('')
-  const [selectedMapel, setSelectedMapel] = useState('all')
+
+  // filter tanggal (range)
+  const [startDate, setStartDate] = useState('')
+  const [endDate, setEndDate] = useState('')
+
+  const [nilaiRows, setNilaiRows] = useState([])
+  const [absensiRows, setAbsensiRows] = useState([])
 
   useEffect(() => {
     const load = async () => {
@@ -20,52 +46,63 @@ const NilaiAbsensiAdmin = () => {
         setLoading(true)
         setError(null)
 
-        // ====== Ambil semua nilai + info siswa & kelas ======
-        const { data: grades, error: gradesError } = await supabase
+        // 1. Ambil data kelas
+        const { data: kelasData, error: kelasError } = await supabase
+          .from('classes')
+          .select('id, nama')
+          .order('nama', { ascending: true })
+
+        if (kelasError) throw kelasError
+        setClasses(kelasData || [])
+
+        // 2. Ambil data nilai (grades per siswa)
+        const { data: nilaiData, error: nilaiError } = await supabase
           .from('grades')
           .select(`
             id,
-            mapel,
             nilai,
+            tanggal,
+            mapel,
+            tipe,
             siswa:siswa_id (
               id,
               first_name,
-              last_name,
-              nisn,
-              kelas:kelas_id (
-                id,
-                nama
-              )
+              last_name
+            ),
+            kelas:kelas_id (
+              id,
+              nama
             )
           `)
+          .order('tanggal', { ascending: false })
 
-        if (gradesError) throw gradesError
+        if (nilaiError) throw nilaiError
+        setNilaiRows(nilaiData || [])
 
-        // ====== Ambil absensi + info siswa & kelas ======
-        const { data: attendance, error: attError } = await supabase
+        // 3. Ambil data absensi (attendance per siswa)
+        const { data: absensiData, error: absensiError } = await supabase
           .from('attendance')
           .select(`
             id,
-            status,
             date,
+            status,
             siswa:siswa_id (
               id,
               first_name,
-              last_name,
-              kelas:kelas_id (
-                id,
-                nama
-              )
+              last_name
+            ),
+            kelas:kelas_id (
+              id,
+              nama
             )
           `)
+          .order('date', { ascending: false })
 
-        if (attError) throw attError
-
-        setGradesRaw(grades || [])
-        setAttendanceRaw(attendance || [])
+        if (absensiError) throw absensiError
+        setAbsensiRows(absensiData || [])
       } catch (err) {
-        console.error('Monitoring admin error:', err)
-        setError('Gagal memuat data nilai & absensi.')
+        console.error('NilaiAbsensiAdmin load error:', err)
+        setError(err.message || 'Gagal memuat data monitoring.')
       } finally {
         setLoading(false)
       }
@@ -74,114 +111,115 @@ const NilaiAbsensiAdmin = () => {
     load()
   }, [])
 
-  // ====== OPTIONS FILTER (kelas & mapel) ======
-
-  const classOptions = useMemo(() => {
+  const classMap = useMemo(() => {
     const map = new Map()
-    gradesRaw.forEach((g) => {
-      const kelas = g.siswa?.kelas
-      if (kelas?.id && !map.has(kelas.id)) {
-        map.set(kelas.id, kelas.nama || '(Tanpa nama)')
+    classes.forEach((k) => {
+      map.set(k.id, k.nama || `Kelas ${k.id?.slice(0, 4)}`)
+    })
+    return map
+  }, [classes])
+
+  const isInDateRange = (rawDate) => {
+    if (!rawDate) return false
+    const d = rawDate.slice(0, 10) // YYYY-MM-DD
+
+    if (startDate && d < startDate) return false
+    if (endDate && d > endDate) return false
+    return true
+  }
+
+  const filteredNilai = useMemo(() => {
+    const namaFilter = searchName.trim().toLowerCase()
+    return (nilaiRows || [])
+      .filter((row) => {
+        if (selectedClass && row.kelas?.id !== selectedClass) return false
+        if (selectedTipe && row.tipe !== selectedTipe) return false
+
+        if (startDate || endDate) {
+          if (!isInDateRange(row.tanggal || '')) return false
+        }
+
+        if (namaFilter) {
+          const nama = `${row.siswa?.first_name || ''} ${row.siswa?.last_name || ''}`.toLowerCase()
+          if (!nama.includes(namaFilter)) return false
+        }
+        return true
+      })
+      .sort((a, b) => {
+        const ka = a.kelas?.nama || ''
+        const kb = b.kelas?.nama || ''
+        if (ka !== kb) return ka.localeCompare(kb)
+        const na = `${a.siswa?.first_name || ''} ${a.siswa?.last_name || ''}`
+        const nb = `${b.siswa?.first_name || ''} ${b.siswa?.last_name || ''}`
+        return na.localeCompare(nb)
+      })
+  }, [nilaiRows, selectedClass, selectedTipe, searchName, startDate, endDate])
+
+  const filteredAbsensi = useMemo(() => {
+    const namaFilter = searchName.trim().toLowerCase()
+
+    // 1. Filter biasa
+    const filtered = (absensiRows || []).filter((row) => {
+      if (selectedClass && row.kelas?.id !== selectedClass) return false
+
+      if (startDate || endDate) {
+        if (!isInDateRange(row.date || '')) return false
       }
-    })
-    attendanceRaw.forEach((a) => {
-      const kelas = a.siswa?.kelas
-      if (kelas?.id && !map.has(kelas.id)) {
-        map.set(kelas.id, kelas.nama || '(Tanpa nama)')
+
+      if (namaFilter) {
+        const nama = `${row.siswa?.first_name || ''} ${row.siswa?.last_name || ''}`.toLowerCase()
+        if (!nama.includes(namaFilter)) return false
       }
-    })
-    return Array.from(map.entries()).map(([id, nama]) => ({ id, nama }))
-  }, [gradesRaw, attendanceRaw])
-
-  const mapelOptions = useMemo(() => {
-    const set = new Set()
-    gradesRaw.forEach((g) => {
-      if (g.mapel) set.add(g.mapel)
-    })
-    return Array.from(set)
-  }, [gradesRaw])
-
-  // ====== FILTER DATA BERDASARKAN KELAS, NAMA, MAPEL ======
-
-  const filteredGrades = useMemo(() => {
-    const q = searchName.trim().toLowerCase()
-    return gradesRaw.filter((g) => {
-      const kelasId = g.siswa?.kelas?.id
-      const fullName =
-        `${g.siswa?.first_name || ''} ${g.siswa?.last_name || ''}`.trim().toLowerCase()
-
-      const matchClass =
-        selectedClass === 'all' || (kelasId && kelasId === selectedClass)
-
-      const matchName = !q || fullName.includes(q)
-
-      const matchMapel =
-        selectedMapel === 'all' || g.mapel === selectedMapel
-
-      return matchClass && matchName && matchMapel
-    })
-  }, [gradesRaw, selectedClass, searchName, selectedMapel])
-
-  const filteredAttendance = useMemo(() => {
-    const q = searchName.trim().toLowerCase()
-    return attendanceRaw.filter((a) => {
-      const kelasId = a.siswa?.kelas?.id
-      const fullName =
-        `${a.siswa?.first_name || ''} ${a.siswa?.last_name || ''}`.trim().toLowerCase()
-
-      const matchClass =
-        selectedClass === 'all' || (kelasId && kelasId === selectedClass)
-
-      const matchName = !q || fullName.includes(q)
-
-      return matchClass && matchName
-    })
-  }, [attendanceRaw, selectedClass, searchName])
-
-  // ====== SUMMARY NILAI PER MAPEL (SETELAH FILTER) ======
-
-  const gradeSummary = useMemo(() => {
-    const map = {}
-    filteredGrades.forEach((g) => {
-      if (!g.mapel) return
-      const n = Number(g.nilai || 0)
-      if (!map[g.mapel]) map[g.mapel] = { total: 0, count: 0 }
-      map[g.mapel].total += n
-      map[g.mapel].count += 1
+      return true
     })
 
-    return Object.entries(map).map(([mapel, { total, count }]) => ({
-      mapel,
-      rata: count ? total / count : 0,
-      jumlah: count,
-    }))
-  }, [filteredGrades])
+    // 2. Group by (siswa_id + date) untuk hilangin duplikat
+    const grouped = new Map()
 
-  // ====== SUMMARY ABSENSI (SETELAH FILTER) ======
+    for (const row of filtered) {
+      const siswaId = row.siswa?.id || row.siswa_id || 'no-siswa'
+      const dateKey = (row.date || '').slice(0, 10)
+      if (!dateKey) continue
 
-  const attendanceSummary = useMemo(() => {
-    const total = filteredAttendance.length
+      const key = `${siswaId}-${dateKey}`
 
-    const countBy = (status) =>
-      filteredAttendance.filter((a) => a.status === status).length
+      if (!grouped.has(key)) {
+        grouped.set(key, row)
+      } else {
+        const existing = grouped.get(key)
+        const sExisting = (existing.status || '').toLowerCase()
+        const sNew = (row.status || '').toLowerCase()
+        const pExisting = STATUS_PRIORITY[sExisting] ?? 0
+        const pNew = STATUS_PRIORITY[sNew] ?? 0
 
-    const hadir = countBy('hadir')
-    const alpha = countBy('alpha')
-    const izin = countBy('izin')
-    const sakit = countBy('sakit')
-    const telat = countBy('telat')
-
-    return {
-      total,
-      hadir,
-      alpha,
-      izin,
-      sakit,
-      telat,
+        // kalau status baru "lebih berat", ganti
+        if (pNew > pExisting) {
+          grouped.set(key, row)
+        }
+      }
     }
-  }, [filteredAttendance])
 
-  if (loading) return <LoadingSpinner />
+    // 3. Balikin dalam bentuk array + sorting
+    const uniqueRows = Array.from(grouped.values())
+
+    return uniqueRows.sort((a, b) => {
+      const ka = a.kelas?.nama || ''
+      const kb = b.kelas?.nama || ''
+      if (ka !== kb) return ka.localeCompare(kb)
+
+      const na = `${a.siswa?.first_name || ''} ${a.siswa?.last_name || ''}`
+      const nb = `${b.siswa?.first_name || ''} ${b.siswa?.last_name || ''}`
+      if (na !== nb) return na.localeCompare(nb)
+
+      const da = (a.date || '').slice(0, 10)
+      const db = (b.date || '').slice(0, 10)
+      return da.localeCompare(db)
+    })
+  }, [absensiRows, selectedClass, searchName, startDate, endDate])
+
+  if (loading && !nilaiRows.length && !absensiRows.length) {
+    return <LoadingSpinner />
+  }
 
   return (
     <div className="space-y-6">
@@ -196,7 +234,7 @@ const NilaiAbsensiAdmin = () => {
             Monitoring Nilai & Absensi
           </h1>
           <p className="text-gray-600 mt-1">
-            Pantau performa akademik dan kehadiran berdasarkan kelas & nama
+            Pantau nilai dan kehadiran siswa secara terpusat, per nama dan per tanggal.
           </p>
         </div>
       </motion.div>
@@ -207,199 +245,196 @@ const NilaiAbsensiAdmin = () => {
         </div>
       )}
 
-      {/* FILTER BAR */}
+      {/* Filter Bar (kelas + tipe + tanggal + nama) */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="bg-white rounded-xl shadow-sm p-4 grid grid-cols-1 md:grid-cols-3 gap-4"
+        className="bg-white rounded-xl shadow-sm p-4 flex flex-col gap-4"
       >
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Kelas
-          </label>
-          <select
-            value={selectedClass}
-            onChange={(e) => setSelectedClass(e.target.value)}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-          >
-            <option value="all">Semua Kelas</option>
-            {classOptions.map((k) => (
-              <option key={k.id} value={k.id}>
-                {k.nama}
-              </option>
-            ))}
-          </select>
+        <div className="flex flex-wrap items-center gap-4">
+          {/* Filter Kelas */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-gray-700">
+              Kelas:
+            </span>
+            <select
+              value={selectedClass}
+              onChange={(e) => setSelectedClass(e.target.value)}
+              className="border border-gray-300 rounded-lg px-3 py-2 text-sm"
+            >
+              <option value="">Semua</option>
+              {classes.map((k) => (
+                <option key={k.id} value={k.id}>
+                  {classMap.get(k.id)}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Filter Tipe Nilai */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-gray-700">
+              Tipe Nilai:
+            </span>
+            <select
+              value={selectedTipe}
+              onChange={(e) => setSelectedTipe(e.target.value)}
+              className="border border-gray-300 rounded-lg px-3 py-2 text-sm"
+            >
+              {TIPE_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Filter Tanggal (range) */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-gray-700">
+              Tanggal:
+            </span>
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="border border-gray-300 rounded-lg px-2 py-1 text-xs"
+            />
+            <span className="text-xs text-gray-500">sampai</span>
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="border border-gray-300 rounded-lg px-2 py-1 text-xs"
+            />
+          </div>
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Nama Siswa
-          </label>
+        {/* Search Nama */}
+        <div className="flex items-center gap-2 w-full md:w-80">
+          <Search size={16} className="text-gray-400" />
           <input
             type="text"
+            placeholder="Cari nama siswa..."
             value={searchName}
             onChange={(e) => setSearchName(e.target.value)}
-            placeholder="Cari nama siswa..."
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+            className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm"
           />
         </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Mata Pelajaran
-          </label>
-          <select
-            value={selectedMapel}
-            onChange={(e) => setSelectedMapel(e.target.value)}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-          >
-            <option value="all">Semua Mapel</option>
-            {mapelOptions.map((m) => (
-              <option key={m} value={m}>
-                {m}
-              </option>
-            ))}
-          </select>
-        </div>
       </motion.div>
 
-      {/* SUMMARY ABSENSI */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4"
-      >
-        <div className="bg-white rounded-xl shadow-sm p-4">
-          <p className="text-xs text-gray-500 mb-1">Total Catatan</p>
-          <p className="text-xl font-semibold text-gray-900">
-            {attendanceSummary.total}
-          </p>
-        </div>
-        <div className="bg-white rounded-xl shadow-sm p-4">
-          <p className="text-xs text-gray-500 mb-1">Hadir</p>
-          <p className="text-xl font-semibold text-green-700">
-            {attendanceSummary.hadir}
-          </p>
-        </div>
-        <div className="bg-white rounded-xl shadow-sm p-4">
-          <p className="text-xs text-gray-500 mb-1">Alpha</p>
-          <p className="text-xl font-semibold text-red-700">
-            {attendanceSummary.alpha}
-          </p>
-        </div>
-        <div className="bg-white rounded-xl shadow-sm p-4">
-          <p className="text-xs text-gray-500 mb-1">Izin</p>
-          <p className="text-xl font-semibold text-blue-700">
-            {attendanceSummary.izin}
-          </p>
-        </div>
-        <div className="bg-white rounded-xl shadow-sm p-4">
-          <p className="text-xs text-gray-500 mb-1">Sakit</p>
-          <p className="text-xl font-semibold text-yellow-700">
-            {attendanceSummary.sakit}
-          </p>
-        </div>
-        <div className="bg-white rounded-xl shadow-sm p-4">
-          <p className="text-xs text-gray-500 mb-1">% Kehadiran (kasar)</p>
-          <p className="text-xl font-semibold text-gray-900">
-            {attendanceSummary.total
-              ? (
-                  (attendanceSummary.hadir / attendanceSummary.total) *
-                  100
-                ).toFixed(1)
-              : 0}
-            %
-          </p>
-        </div>
-      </motion.div>
+      {/* Dua kolom: Nilai per siswa & Absensi per siswa */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Monitoring Nilai per Siswa */}
+        <motion.div
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+          className="bg-white rounded-xl shadow-sm p-4"
+        >
+          <h2 className="text-sm font-semibold text-gray-900 mb-3">
+            Nilai per Siswa
+          </h2>
 
-      {/* TABEL NILAI PER MAPEL (SETELAH FILTER) */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="bg-white rounded-xl shadow-sm p-4"
-      >
-        <h2 className="text-sm font-semibold text-gray-800 mb-3">
-          Rata-rata Nilai per Mata Pelajaran (berdasarkan filter)
-        </h2>
-
-        {gradeSummary.length === 0 ? (
-          <p className="text-sm text-gray-500">
-            Tidak ada data nilai untuk filter saat ini.
-          </p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
-              <thead>
-                <tr className="border-b bg-gray-50">
-                  <th className="text-left py-2 px-3">Mapel</th>
-                  <th className="text-left py-2 px-3">Rata-rata</th>
-                  <th className="text-left py-2 px-3">Jumlah Nilai</th>
-                </tr>
-              </thead>
-              <tbody>
-                {gradeSummary.map((g) => (
-                  <tr key={g.mapel} className="border-b last:border-0">
-                    <td className="py-2 px-3">{g.mapel}</td>
-                    <td className="py-2 px-3">{g.rata.toFixed(1)}</td>
-                    <td className="py-2 px-3">{g.jumlah}</td>
+          {!filteredNilai.length ? (
+            <p className="text-sm text-gray-500">
+              Belum ada data nilai yang cocok dengan filter.
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-xs md:text-sm">
+                <thead>
+                  <tr className="border-b bg-gray-50">
+                    <th className="text-left py-2 px-3">Nama</th>
+                    <th className="text-left py-2 px-3">Kelas</th>
+                    <th className="text-left py-2 px-3">Mapel</th>
+                    <th className="text-left py-2 px-3">Tipe</th>
+                    <th className="text-left py-2 px-3">Nilai</th>
+                    <th className="text-left py-2 px-3">Tanggal</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </motion.div>
+                </thead>
+                <tbody>
+                  {filteredNilai.map((row) => {
+                    const nama = `${row.siswa?.first_name || ''} ${row.siswa?.last_name || ''}`.trim()
+                    const kelasNama =
+                      row.kelas?.nama ||
+                      classMap.get(row.kelas_id) ||
+                      '-'
+                    return (
+                      <tr key={row.id} className="border-b last:border-0">
+                        <td className="py-2 px-3">{nama || '-'}</td>
+                        <td className="py-2 px-3">{kelasNama}</td>
+                        <td className="py-2 px-3">{row.mapel || '-'}</td>
+                        <td className="py-2 px-3">
+                          {TIPE_LABEL[row.tipe] || row.tipe || '-'}
+                        </td>
+                        <td className="py-2 px-3">{row.nilai ?? '-'}</td>
+                        <td className="py-2 px-3">
+                          {row.tanggal
+                            ? new Date(row.tanggal).toLocaleDateString('id-ID')
+                            : '-'}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </motion.div>
 
-      {/* TABEL DETAIL ABSENSI (OPSIONAL, TAPI BERMANFAAT) */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="bg-white rounded-xl shadow-sm p-4"
-      >
-        <h2 className="text-sm font-semibold text-gray-800 mb-3">
-          Detail Absensi (berdasarkan filter)
-        </h2>
+        {/* Monitoring Absensi per Siswa */}
+        <motion.div
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          className="bg-white rounded-xl shadow-sm p-4"
+        >
+          <h2 className="text-sm font-semibold text-gray-900 mb-3">
+            Absensi per Siswa (tanpa duplikat per hari)
+          </h2>
 
-        {filteredAttendance.length === 0 ? (
-          <p className="text-sm text-gray-500">
-            Tidak ada data absensi untuk filter saat ini.
-          </p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
-              <thead>
-                <tr className="border-b bg-gray-50">
-                  <th className="text-left py-2 px-3">Tanggal</th>
-                  <th className="text-left py-2 px-3">Nama</th>
-                  <th className="text-left py-2 px-3">Kelas</th>
-                  <th className="text-left py-2 px-3">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredAttendance.map((a) => (
-                  <tr key={a.id} className="border-b last:border-0">
-                    <td className="py-2 px-3">
-                      {a.date
-                        ? new Date(a.date).toLocaleDateString('id-ID')
-                        : '-'}
-                    </td>
-                    <td className="py-2 px-3">
-                      {`${a.siswa?.first_name || ''} ${
-                        a.siswa?.last_name || ''
-                      }`.trim() || '-'}
-                    </td>
-                    <td className="py-2 px-3">
-                      {a.siswa?.kelas?.nama || '-'}
-                    </td>
-                    <td className="py-2 px-3">{a.status || '-'}</td>
+          {!filteredAbsensi.length ? (
+            <p className="text-sm text-gray-500">
+              Belum ada data absensi yang cocok dengan filter.
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-xs md:text-sm">
+                <thead>
+                  <tr className="border-b bg-gray-50">
+                    <th className="text-left py-2 px-3">Nama</th>
+                    <th className="text-left py-2 px-3">Kelas</th>
+                    <th className="text-left py-2 px-3">Tanggal</th>
+                    <th className="text-left py-2 px-3">Status</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </motion.div>
+                </thead>
+                <tbody>
+                  {filteredAbsensi.map((row) => {
+                    const nama = `${row.siswa?.first_name || ''} ${row.siswa?.last_name || ''}`.trim()
+                    const kelasNama =
+                      row.kelas?.nama ||
+                      classMap.get(row.kelas_id) ||
+                      '-'
+                    return (
+                      <tr key={row.id} className="border-b last:border-0">
+                        <td className="py-2 px-3">{nama || '-'}</td>
+                        <td className="py-2 px-3">{kelasNama}</td>
+                        <td className="py-2 px-3">
+                          {row.date
+                            ? new Date(row.date).toLocaleDateString('id-ID')
+                            : '-'}
+                        </td>
+                        <td className="py-2 px-3 capitalize">
+                          {row.status || '-'}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </motion.div>
+      </div>
     </div>
   )
 }

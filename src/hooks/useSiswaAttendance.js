@@ -48,7 +48,7 @@ export const useSiswaAttendance = () => {
       return {
         total,
         hadir: 0,
-        alpha: 0,
+        alpa: 0,
         izin: 0,
         sakit: 0,
         telat: 0,
@@ -60,17 +60,17 @@ export const useSiswaAttendance = () => {
       records.filter((r) => r.status === status).length
 
     const hadir = countBy('hadir')
-    const alpha = countBy('alpha')
+    const alpa = countBy('alpa')
     const izin = countBy('izin')
     const sakit = countBy('sakit')
-    const telat = countBy('telat')
+    const telat = countBy('telat') // pakai kalau emang ada status ini
 
     const presentaseHadir = (hadir / total) * 100
 
     return {
       total,
       hadir,
-      alpha,
+      alpa,
       izin,
       sakit,
       telat,

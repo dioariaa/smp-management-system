@@ -102,7 +102,7 @@ const Absensi = () => {
     }
 
     loadGuruAndClasses()
-  }, [user]) // jangan pakai selectedClass disini biar ga loop
+  }, [user])
 
   const classMap = useMemo(() => {
     const map = new Map()
@@ -134,11 +134,10 @@ const Absensi = () => {
 
         setStudents(siswaRows || [])
 
-        // Absensi existing
+        // Absensi existing untuk kelas & tanggal itu
         const { data: attendanceRows, error: attendanceError } = await supabase
           .from('attendance')
           .select('id, siswa_id, status, date')
-          .eq('guru_id', guru.id)
           .eq('kelas_id', selectedClass)
           .eq('date', selectedDate)
 
@@ -185,25 +184,47 @@ const Absensi = () => {
     try {
       setSaving(true)
 
-      // Payload insert (biarkan insert; buat demo ini cukup)
+      const tanggal = selectedDate.slice(0, 10)
+
+      // Payload untuk UPSERT:
+      // constraint di DB: attendance_unique_siswa_date (UNIQUE (siswa_id, date))
+      // jadi onConflict HARUS persis 'siswa_id,date'
       const payload = students.map((s) => ({
         guru_id: guru.id,
         siswa_id: s.id,
         kelas_id: selectedClass,
-        date: selectedDate,
+        date: tanggal,
         status: attendanceMap[s.id] || 'hadir'
       }))
 
-      const { error: insertError } = await supabase
+      const { error: upsertError } = await supabase
         .from('attendance')
-        .insert(payload)
+        .upsert(payload, {
+          onConflict: 'siswa_id,date'
+        })
 
-      if (insertError) {
-        console.error('save attendance error:', insertError)
-        throw insertError
+      if (upsertError) {
+        console.error('save attendance upsert error:', upsertError)
+        throw upsertError
       }
 
-      toast.success('Absensi berhasil disimpan.')
+      toast.success('Absensi berhasil disimpan / diperbarui.')
+
+      // optional: reload dari DB supaya state selalu sinkron
+      const { data: attendanceRows, error: attendanceError } = await supabase
+        .from('attendance')
+        .select('id, siswa_id, status, date')
+        .eq('kelas_id', selectedClass)
+        .eq('date', tanggal)
+
+      if (!attendanceError) {
+        const map = {}
+        ;(attendanceRows || []).forEach((row) => {
+          if (!row.siswa_id) return
+          map[row.siswa_id] = row.status || ''
+        })
+        setAttendanceMap(map)
+      }
     } catch (err) {
       console.error('handleSave error:', err)
       toast.error('Gagal menyimpan absensi.')
