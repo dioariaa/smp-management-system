@@ -43,7 +43,7 @@ const DashboardAdmin = () => {
           animate={{ opacity: 1, x: 0 }}
         >
           <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-semibold text-gray-900">Rata-rata Nilai per Kelas</h2>
+          <h2 className="text-xl font-semibold text-gray-900">Jumlah Siswa per Kelas</h2>
             <TrendingUp className="text-gray-400" size={20} />
           </div>
           <GradeChart />

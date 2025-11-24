@@ -2,14 +2,14 @@ import React, { useState } from 'react'
 import { motion } from 'framer-motion'
 import { Eye, EyeOff, Mail, User, BookOpen } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import toast from 'react-hot-toast'
 
 const Login = () => {
   const [formData, setFormData] = useState({
     identifier: '',
     password: '',
-    loginMethod: 'email'
+    loginMethod: 'email' // 'email' | 'nip' | 'nisn'
   })
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
@@ -21,7 +21,11 @@ const Login = () => {
     e.preventDefault()
     setIsLoading(true)
 
-    const result = await login(formData.identifier, formData.password, formData.loginMethod)
+    const result = await login(
+      formData.identifier,
+      formData.password,
+      formData.loginMethod
+    )
     
     if (result.success) {
       if (result.needsOnboarding) {
@@ -35,6 +39,28 @@ const Login = () => {
     
     setIsLoading(false)
   }
+
+  const setLoginMethod = (method) => {
+    setFormData(prev => ({
+      ...prev,
+      loginMethod: method,
+      identifier: '' // reset field biar ga ke-mix
+    }))
+  }
+
+  const loginLabel =
+    formData.loginMethod === 'email'
+      ? 'Email'
+      : formData.loginMethod === 'nip'
+      ? 'NIP'
+      : 'NISN'
+
+  const loginPlaceholder =
+    formData.loginMethod === 'email'
+      ? 'Masukkan email'
+      : formData.loginMethod === 'nip'
+      ? 'Masukkan NIP'
+      : 'Masukkan NISN'
 
   return (
     <div className="min-h-screen bg-gradient-primary flex items-center justify-center p-4">
@@ -53,20 +79,66 @@ const Login = () => {
 
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Login Method Selection */}
-          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Metode Login
+            </label>
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => setLoginMethod('email')}
+                className={
+                  'flex items-center justify-center space-x-1 py-2 px-2 rounded-lg border text-xs sm:text-sm ' +
+                  (formData.loginMethod === 'email'
+                    ? 'bg-blue-600 text-white border-blue-600'
+                    : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50')
+                }
+              >
+                <Mail size={16} />
+                <span>Email</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setLoginMethod('nip')}
+                className={
+                  'flex items-center justify-center space-x-1 py-2 px-2 rounded-lg border text-xs sm:text-sm ' +
+                  (formData.loginMethod === 'nip'
+                    ? 'bg-blue-600 text-white border-blue-600'
+                    : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50')
+                }
+              >
+                <User size={16} />
+                <span>NIP</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setLoginMethod('nisn')}
+                className={
+                  'flex items-center justify-center space-x-1 py-2 px-2 rounded-lg border text-xs sm:text-sm ' +
+                  (formData.loginMethod === 'nisn'
+                    ? 'bg-blue-600 text-white border-blue-600'
+                    : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50')
+                }
+              >
+                <User size={16} />
+                <span>NISN</span>
+              </button>
+            </div>
+          </div>
 
           {/* Identifier Input */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              {formData.loginMethod === 'email' ? 'Email' : 
-               formData.loginMethod === 'nip' ? 'NIP' : 'NISN'}
+              {loginLabel}
             </label>
             <input
-              type="text"
+              type={formData.loginMethod === 'email' ? 'email' : 'text'}
               value={formData.identifier}
-              onChange={(e) => setFormData(prev => ({ ...prev, identifier: e.target.value }))}
+              onChange={(e) =>
+                setFormData((prev) => ({ ...prev, identifier: e.target.value }))
+              }
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-              placeholder={`Masukkan ${formData.loginMethod === 'email' ? 'email' : formData.loginMethod}`}
+              placeholder={loginPlaceholder}
               required
             />
           </div>
@@ -80,7 +152,9 @@ const Login = () => {
               <input
                 type={showPassword ? 'text' : 'password'}
                 value={formData.password}
-                onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
+                onChange={(e) =>
+                  setFormData((prev) => ({ ...prev, password: e.target.value }))
+                }
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors pr-12"
                 placeholder="Masukkan password"
                 required
@@ -96,15 +170,24 @@ const Login = () => {
           </div>
 
           <button
-            type="submit"
-            disabled={isLoading}
-            className="w-full bg-gradient-primary text-white py-3 px-4 rounded-lg font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
-          >
-            {isLoading ? 'Memproses...' : 'Masuk'}
-          </button>
-        </form>
+  type="submit"
+  disabled={isLoading}
+  className="w-full bg-gradient-primary text-white py-3 px-4 rounded-lg font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
+>
+  {isLoading ? 'Memproses...' : 'Masuk'}
+</button>
 
-       
+<p className="text-center text-gray-600 mt-4 text-sm">
+  Belum punya akun?{' '}
+  <Link
+    to="/register"
+    className="text-blue-600 hover:text-blue-700 font-medium"
+  >
+    Daftar di sini
+  </Link>
+</p>
+
+        </form>
       </motion.div>
     </div>
   )

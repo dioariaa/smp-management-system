@@ -4,7 +4,7 @@ import { supabase } from '../supabase/supabaseClient'
 export const fetchGurus = async () => {
   const { data, error } = await supabase
     .from('gurus')
-    .select('id, user_id, nip, first_name, last_name, email, phone, status')
+    .select('id, user_id, nip, first_name, last_name, email, phone, status, mapel')
     .order('created_at', { ascending: false })
 
   if (error) {
@@ -16,11 +16,19 @@ export const fetchGurus = async () => {
 }
 
 export const createGuru = async (payload) => {
-  // Di sini kita cuma buat profile gurunya.
-  // Pembuatan akun auth+users bisa lo sambungin nanti kalau mau.
+  // payload harus sudah mengandung:
+  // nip, first_name, last_name, email, phone, status, mapel
   const { data, error } = await supabase
     .from('gurus')
-    .insert(payload)
+    .insert({
+      nip: payload.nip,
+      first_name: payload.first_name,
+      last_name: payload.last_name,
+      email: payload.email,
+      phone: payload.phone,
+      status: payload.status,
+      mapel: payload.mapel,       // <--- penting
+    })
     .select()
     .single()
 
@@ -35,7 +43,15 @@ export const createGuru = async (payload) => {
 export const updateGuru = async (id, payload) => {
   const { data, error } = await supabase
     .from('gurus')
-    .update(payload)
+    .update({
+      nip: payload.nip,
+      first_name: payload.first_name,
+      last_name: payload.last_name,
+      email: payload.email,
+      phone: payload.phone,
+      status: payload.status,
+      mapel: payload.mapel,       // <--- penting
+    })
     .eq('id', id)
     .select()
     .single()

@@ -1,3 +1,4 @@
+// src/pages/admin/JadwalAdmin.jsx
 import React, { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import { supabase } from '../../supabase/supabaseClient'
@@ -17,11 +18,10 @@ const JadwalAdmin = () => {
   const [form, setForm] = useState({
     kelas_id: '',
     guru_id: '',
-    mapel: '',
     hari: 'Senin',
     jam_mulai: '',
     jam_selesai: '',
-    ruangan: ''
+    ruangan: '',
   })
 
   const [editingId, setEditingId] = useState(null) // null = mode tambah
@@ -61,10 +61,10 @@ const JadwalAdmin = () => {
         if (kelasError) throw kelasError
         setClasses(kelasRows || [])
 
-        // 2. Guru
+        // 2. Guru (+ mapel)
         const { data: guruRows, error: guruError } = await supabase
           .from('gurus')
-          .select('id, first_name, last_name, email')
+          .select('id, first_name, last_name, email, mapel')
           .order('first_name', { ascending: true })
 
         if (guruError) throw guruError
@@ -115,7 +115,7 @@ const JadwalAdmin = () => {
   const handleChange = (field, value) => {
     setForm((prev) => ({
       ...prev,
-      [field]: value
+      [field]: value,
     }))
   }
 
@@ -123,19 +123,27 @@ const JadwalAdmin = () => {
     setForm({
       kelas_id: '',
       guru_id: '',
-      mapel: '',
       hari: 'Senin',
       jam_mulai: '',
       jam_selesai: '',
-      ruangan: ''
+      ruangan: '',
     })
     setEditingId(null)
   }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!form.kelas_id || !form.guru_id || !form.mapel || !form.jam_mulai || !form.jam_selesai) {
-      toast.error('Kelas, guru, mapel, jam mulai & jam selesai wajib diisi.')
+    if (!form.kelas_id || !form.guru_id || !form.jam_mulai || !form.jam_selesai) {
+      toast.error('Kelas, guru, jam mulai & jam selesai wajib diisi.')
+      return
+    }
+
+    // Ambil mapel dari guru yang dipilih
+    const selectedGuru = gurus.find((g) => g.id === form.guru_id)
+    const guruMapel = selectedGuru?.mapel || null
+
+    if (!guruMapel) {
+      toast.error('Guru belum memiliki mapel. Lengkapi mapel di Manajemen Guru dulu.')
       return
     }
 
@@ -145,11 +153,11 @@ const JadwalAdmin = () => {
       const payload = {
         kelas_id: form.kelas_id,
         guru_id: form.guru_id,
-        mapel: form.mapel,
+        mapel: guruMapel, // mapel otomatis ikut guru
         hari: form.hari,
         jam_mulai: form.jam_mulai,
         jam_selesai: form.jam_selesai,
-        ruangan: form.ruangan || null
+        ruangan: form.ruangan || null,
       }
 
       if (editingId) {
@@ -167,9 +175,7 @@ const JadwalAdmin = () => {
         toast.success('Jadwal berhasil diperbarui.')
       } else {
         // INSERT
-        const { error } = await supabase
-          .from('jadwal')
-          .insert(payload)
+        const { error } = await supabase.from('jadwal').insert(payload)
 
         if (error) {
           console.error('Insert jadwal error:', error)
@@ -194,11 +200,10 @@ const JadwalAdmin = () => {
     setForm({
       kelas_id: row.kelas?.id || row.kelas_id || '',
       guru_id: row.guru?.id || row.guru_id || '',
-      mapel: row.mapel || '',
       hari: row.hari || 'Senin',
       jam_mulai: (row.jam_mulai || '').slice(0, 5),
       jam_selesai: (row.jam_selesai || '').slice(0, 5),
-      ruangan: row.ruangan || ''
+      ruangan: row.ruangan || '',
     })
   }
 
@@ -272,7 +277,10 @@ const JadwalAdmin = () => {
           )}
         </div>
 
-        <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <form
+          onSubmit={handleSubmit}
+          className="grid grid-cols-1 md:grid-cols-3 gap-4"
+        >
           {/* Kelas */}
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">
@@ -305,7 +313,7 @@ const JadwalAdmin = () => {
               <option value="">Pilih Guru</option>
               {gurus.map((g) => (
                 <option key={g.id} value={g.id}>
-                  {guruMap.get(g.id)}
+                  {guruMap.get(g.id)}{/* Nama guru */}
                 </option>
               ))}
             </select>
@@ -327,20 +335,6 @@ const JadwalAdmin = () => {
                 </option>
               ))}
             </select>
-          </div>
-
-          {/* Mapel */}
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">
-              Mata Pelajaran
-            </label>
-            <input
-              type="text"
-              value={form.mapel}
-              onChange={(e) => handleChange('mapel', e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-              placeholder="Contoh: Matematika"
-            />
           </div>
 
           {/* Jam Mulai */}
@@ -391,8 +385,12 @@ const JadwalAdmin = () => {
               className="px-4 py-2 rounded-lg text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60"
             >
               {saving
-                ? (editingId ? 'Menyimpan perubahan...' : 'Menyimpan...')
-                : (editingId ? 'Update Jadwal' : 'Tambah Jadwal')}
+                ? editingId
+                  ? 'Menyimpan perubahan...'
+                  : 'Menyimpan...'
+                : editingId
+                ? 'Update Jadwal'
+                : 'Tambah Jadwal'}
             </button>
           </div>
         </form>
@@ -433,10 +431,12 @@ const JadwalAdmin = () => {
                     <td className="py-2 px-3">
                       {j.kelas?.nama || classMap.get(j.kelas_id) || '-'}
                     </td>
-                    <td className="py-2 px-3">{j.mapel}</td>
+                    <td className="py-2 px-3">{j.mapel || '-'}</td>
                     <td className="py-2 px-3">
                       {j.guru
-                        ? `${j.guru.first_name || ''} ${j.guru.last_name || ''}`.trim()
+                        ? `${j.guru.first_name || ''} ${
+                            j.guru.last_name || ''
+                          }`.trim()
                         : guruMap.get(j.guru_id) || '-'}
                     </td>
                     <td className="py-2 px-3">

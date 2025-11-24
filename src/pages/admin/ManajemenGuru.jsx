@@ -4,6 +4,7 @@ import { motion } from 'framer-motion'
 import { Plus, Edit2, Trash2 } from 'lucide-react'
 import { useAdminGuru } from '../../hooks/useAdminGuru'
 import LoadingSpinner from '../../components/LoadingSpinner'
+import { SUBJECT_OPTIONS } from '../../constants/subjects'
 
 const emptyForm = {
   nip: '',
@@ -12,6 +13,7 @@ const emptyForm = {
   email: '',
   phone: '',
   status: 'aktif',
+  mapel: '',        // <--- TAMBAH INI
 }
 
 const ManajemenGuru = () => {
@@ -29,6 +31,14 @@ const ManajemenGuru = () => {
     e.preventDefault()
     try {
       setSubmitting(true)
+
+      // Validasi minimal: mapel wajib
+      if (!form.mapel) {
+        alert('Pilih mata pelajaran yang diajar guru.')
+        setSubmitting(false)
+        return
+      }
+
       if (editingId) {
         await editGuru(editingId, form)
       } else {
@@ -53,6 +63,7 @@ const ManajemenGuru = () => {
       email: guru.email || '',
       phone: guru.phone || '',
       status: guru.status || 'aktif',
+      mapel: guru.mapel || '',    // <--- BACA MAPEL SAAT EDIT
     })
   }
 
@@ -101,7 +112,10 @@ const ManajemenGuru = () => {
         animate={{ opacity: 1, y: 0 }}
         className="bg-white rounded-xl shadow-sm p-4"
       >
-        <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <form
+          onSubmit={handleSubmit}
+          className="grid grid-cols-1 md:grid-cols-3 gap-4"
+        >
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               NIP
@@ -169,6 +183,26 @@ const ManajemenGuru = () => {
             />
           </div>
 
+          {/* MAPEL DROPDOWN */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Mata Pelajaran
+            </label>
+            <select
+              name="mapel"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+              value={form.mapel}
+              onChange={handleChange}
+            >
+              <option value="">Pilih mata pelajaran</option>
+              {SUBJECT_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Status
@@ -228,6 +262,7 @@ const ManajemenGuru = () => {
               <tr className="border-b bg-gray-50">
                 <th className="text-left py-2 px-3">NIP</th>
                 <th className="text-left py-2 px-3">Nama</th>
+                <th className="text-left py-2 px-3">Mapel</th>
                 <th className="text-left py-2 px-3">Email</th>
                 <th className="text-left py-2 px-3">No. HP</th>
                 <th className="text-left py-2 px-3">Status</th>
@@ -238,7 +273,7 @@ const ManajemenGuru = () => {
               {gurus.length === 0 && (
                 <tr>
                   <td
-                    colSpan={6}
+                    colSpan={7}
                     className="text-center text-gray-500 py-4 text-sm"
                   >
                     Belum ada data guru.
@@ -250,6 +285,9 @@ const ManajemenGuru = () => {
                   <td className="py-2 px-3">{g.nip}</td>
                   <td className="py-2 px-3">
                     {g.first_name} {g.last_name || ''}
+                  </td>
+                  <td className="py-2 px-3">
+                    {g.mapel || '-'}
                   </td>
                   <td className="py-2 px-3">{g.email}</td>
                   <td className="py-2 px-3">{g.phone}</td>

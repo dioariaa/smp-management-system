@@ -1,21 +1,19 @@
+// src/store/authStore.js
 import { create } from 'zustand'
 import { supabase } from '../supabase/supabaseClient'
 
-// Helper: ambil profile berdasarkan role
+// Helper untuk ambil profil sesuai role
 const fetchProfileByRole = async (role, userId) => {
   if (!role || !userId) return null
 
   const tableMap = {
-    admin: null,     // admin sengaja gak punya tabel profile khusus
     guru: 'gurus',
     siswa: 'siswas',
     ortu: 'ortu',
   }
 
   const table = tableMap[role]
-  if (!table) {
-    return null
-  }
+  if (!table) return null
 
   const { data, error } = await supabase
     .from(table)
@@ -37,12 +35,18 @@ export const useAuthStore = create((set, get) => ({
   role: null,
   isLoading: true,
 
+  // =========================================
   // LOGIN (email / NIP / NISN)
-  login: async (identifier, password, loginMethod) => {
+  // =========================================
+  login: async (identifier, password, loginMethod = 'email') => {
     try {
-      let email = identifier
+      let email = identifier?.trim()
 
-      // Login pakai NIP (guru)
+      if (!identifier || !password) {
+        throw new Error('Identifier dan password wajib diisi')
+      }
+
+      // Map loginMethod -> email
       if (loginMethod === 'nip') {
         const { data: guru, error } = await supabase
           .from('gurus')
@@ -50,30 +54,26 @@ export const useAuthStore = create((set, get) => ({
           .eq('nip', identifier)
           .single()
 
-        if (error || !guru) {
-          throw new Error('NIP tidak ditemukan atau belum terdaftar')
+        if (error || !guru || !guru.email) {
+          throw new Error('NIP tidak ditemukan atau belum terhubung dengan akun')
         }
         email = guru.email
-      }
-
-      // Login pakai NISN (siswa)
-      else if (loginMethod === 'nisn') {
+      } else if (loginMethod === 'nisn') {
         const { data: siswa, error } = await supabase
           .from('siswas')
           .select('email')
           .eq('nisn', identifier)
           .single()
 
-        if (error || !siswa) {
-          throw new Error('NISN tidak ditemukan atau belum terdaftar')
+        if (error || !siswa || !siswa.email) {
+          throw new Error('NISN tidak ditemukan atau belum terhubung dengan akun')
         }
         email = siswa.email
       }
 
-      // Supabase auth
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
-        password,
+        password
       })
 
       if (error) throw error
@@ -81,7 +81,7 @@ export const useAuthStore = create((set, get) => ({
         throw new Error('Gagal login, akun tidak ditemukan')
       }
 
-      // Ambil record user (role, status, dll)
+      // Ambil data user (role, status, dll)
       const { data: userData, error: userError } = await supabase
         .from('users')
         .select('*')
@@ -92,25 +92,25 @@ export const useAuthStore = create((set, get) => ({
         throw new Error('Data user tidak ditemukan')
       }
 
-      // Ambil profile berdasarkan role
+      // Ambil profil sesuai role
       const profileData = await fetchProfileByRole(userData.role, data.user.id)
 
       set({
         user: data.user,
         profile: profileData,
-        role: userData.role,
+        role: userData.role
       })
 
-      // Log activity login
+      // Log aktivitas login
       await supabase.from('activity_logs').insert({
         user_id: data.user.id,
         action: 'login',
-        description: `User logged in as ${userData.role}`,
+        description: `User logged in as ${userData.role}`
       })
 
       return {
         success: true,
-        needsOnboarding: profileData?.status === 'belum_lengkap',
+        needsOnboarding: profileData?.status === 'belum_lengkap'
       }
     } catch (error) {
       console.error('Login error:', error)
@@ -118,10 +118,146 @@ export const useAuthStore = create((set, get) => ({
     }
   },
 
-  // REGISTER ORTU
+  // =========================================
+  // REGISTER GURU (pakai NIP)
+  // =========================================
+  registerGuru: async ({ nip, email, password }) => {
+    try {
+      if (!nip || !email || !password) {
+        throw new Error('NIP, email, dan password wajib diisi')
+      }
+
+      // Pastikan guru sudah diinput admin dan belum punya akun
+      const { data: guru, error: guruError } = await supabase
+        .from('gurus')
+        .select('id, user_id')
+        .eq('nip', nip)
+        .single()
+
+      if (guruError || !guru) {
+        throw new Error('Guru dengan NIP tersebut tidak ditemukan. Minta admin untuk mendaftarkan data guru dulu.')
+      }
+
+      if (guru.user_id) {
+        throw new Error('Akun untuk NIP ini sudah pernah dibuat.')
+      }
+
+      // Buat akun auth
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email,
+        password
+      })
+
+      if (authError) throw authError
+      if (!authData.user) {
+        throw new Error('Gagal membuat akun pengguna.')
+      }
+
+      const authUserId = authData.user.id
+
+      // Insert ke tabel users
+      const { error: userError } = await supabase
+        .from('users')
+        .insert({
+          id: authUserId,
+          email,
+          role: 'guru',
+          status: 'active'
+        })
+
+      if (userError) throw userError
+
+      // Update tabel gurus: hubungkan user_id + sync email
+      const { error: linkError } = await supabase
+        .from('gurus')
+        .update({
+          user_id: authUserId,
+          email
+        })
+        .eq('id', guru.id)
+
+      if (linkError) throw linkError
+
+      return { success: true }
+    } catch (error) {
+      console.error('Register guru error:', error)
+      return { success: false, error: error.message }
+    }
+  },
+
+  // =========================================
+  // REGISTER SISWA (pakai NISN)
+  // =========================================
+  registerSiswa: async ({ nisn, email, password }) => {
+    try {
+      if (!nisn || !email || !password) {
+        throw new Error('NISN, email, dan password wajib diisi')
+      }
+
+      // Pastikan siswa sudah diinput admin dan belum punya akun
+      const { data: siswa, error: siswaError } = await supabase
+        .from('siswas')
+        .select('id, user_id')
+        .eq('nisn', nisn)
+        .single()
+
+      if (siswaError || !siswa) {
+        throw new Error('Siswa dengan NISN tersebut tidak ditemukan. Minta admin untuk mendaftarkan data siswa dulu.')
+      }
+
+      if (siswa.user_id) {
+        throw new Error('Akun untuk NISN ini sudah pernah dibuat.')
+      }
+
+      // Buat akun auth
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email,
+        password
+      })
+
+      if (authError) throw authError
+      if (!authData.user) {
+        throw new Error('Gagal membuat akun pengguna.')
+      }
+
+      const authUserId = authData.user.id
+
+      // Insert ke tabel users
+      const { error: userError } = await supabase
+        .from('users')
+        .insert({
+          id: authUserId,
+          email,
+          role: 'siswa',
+          status: 'active'
+        })
+
+      if (userError) throw userError
+
+      // Update tabel siswas: hubungkan user_id + sync email
+      const { error: linkError } = await supabase
+        .from('siswas')
+        .update({
+          user_id: authUserId,
+          email
+        })
+        .eq('id', siswa.id)
+
+      if (linkError) throw linkError
+
+      return { success: true }
+    } catch (error) {
+      console.error('Register siswa error:', error)
+      return { success: false, error: error.message }
+    }
+  },
+
+  // =========================================
+  // REGISTER ORTU (flow lama, pakai NISN anak)
+  // =========================================
   registerOrtu: async (formData) => {
     try {
-      // Cek apakah siswa dengan NISN itu ada
+      // Check if siswa exists with provided NISN
       const { data: siswa, error: siswaError } = await supabase
         .from('siswas')
         .select('id')
@@ -132,7 +268,7 @@ export const useAuthStore = create((set, get) => ({
         throw new Error('Siswa dengan NISN tersebut tidak ditemukan')
       }
 
-      // Buat user auth di Supabase (password di-hash oleh Supabase)
+      // Create auth user (Supabase akan hash password sendiri)
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
@@ -143,19 +279,19 @@ export const useAuthStore = create((set, get) => ({
         throw new Error('Gagal membuat akun pengguna')
       }
 
-      // Insert ke tabel users (tanpa password)
+      // Create user record TANPA menyimpan password
       const { error: userError } = await supabase
         .from('users')
         .insert({
           id: authData.user.id,
           email: formData.email,
           role: 'ortu',
-          status: 'active', // sesuaikan sama konvensi status lo
+          status: 'active'
         })
 
       if (userError) throw userError
 
-      // Insert ke tabel ortu (profile)
+      // Create ortu profile
       const { error: ortuError } = await supabase
         .from('ortu')
         .insert({
@@ -165,122 +301,89 @@ export const useAuthStore = create((set, get) => ({
           last_name: formData.lastName,
           email: formData.email,
           phone: formData.phone,
-          address: formData.address,
+          address: formData.address
         })
 
       if (ortuError) throw ortuError
 
       return { success: true }
     } catch (error) {
-      console.error('Register error:', error)
+      console.error('Register ortu error:', error)
       return { success: false, error: error.message }
     }
   },
 
+  // =========================================
   // LOGOUT
+  // =========================================
   logout: async () => {
     const { user } = get()
-
     try {
       if (user) {
         await supabase.from('activity_logs').insert({
           user_id: user.id,
           action: 'logout',
-          description: 'User logged out',
+          description: 'User logged out'
         })
       }
-
-      await supabase.auth.signOut()
-    } catch (error) {
-      console.error('Logout error:', error)
-    } finally {
-      set({
-        user: null,
-        profile: null,
-        role: null,
-        isLoading: false,
-      })
+    } catch (e) {
+      console.error('Log logout error:', e)
     }
+
+    await supabase.auth.signOut()
+    set({ user: null, profile: null, role: null })
   },
 
-  // CEK SESSION / AUTO LOGIN
+  // =========================================
+  // CHECK AUTH (dipakai App.jsx)
+  // =========================================
   checkAuth: async () => {
     try {
-      const {
-        data: { session },
-        error: sessionError,
-      } = await supabase.auth.getSession()
-
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
       if (sessionError) {
         console.error('Session error:', sessionError)
       }
 
-      // Tidak ada session → clear state
-      if (!session?.user) {
+      if (session?.user) {
+        const { data: userData, error: userError } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', session.user.id)
+          .single()
+
+        if (userError || !userData) {
+          console.error('User data not found:', userError)
+          set({ isLoading: false })
+          return
+        }
+
+        const profileData = await fetchProfileByRole(userData.role, session.user.id)
+
         set({
-          user: null,
-          profile: null,
-          role: null,
-          isLoading: false,
+          user: session.user,
+          profile: profileData,
+          role: userData.role
         })
-        return
       }
-
-      // Ambil data user dari tabel users
-      const { data: userData, error: userError } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', session.user.id)
-        .single()
-
-      if (userError || !userData) {
-        console.error('User data not found:', userError)
-        set({
-          user: null,
-          profile: null,
-          role: null,
-          isLoading: false,
-        })
-        return
-      }
-
-      const profileData = await fetchProfileByRole(
-        userData.role,
-        session.user.id
-      )
-
-      set({
-        user: session.user,
-        profile: profileData,
-        role: userData.role,
-        isLoading: false,
-      })
     } catch (error) {
       console.error('Auth check error:', error)
-      set({
-        user: null,
-        profile: null,
-        role: null,
-        isLoading: false,
-      })
+    } finally {
+      set({ isLoading: false })
     }
   },
 
-  // ONBOARDING GURU / SISWA
+  // =========================================
+  // COMPLETE ONBOARDING (guru & siswa)
+  // =========================================
   completeOnboarding: async (formData) => {
-    const { role, user, profile } = get()
-
+    const { role, user } = get()
     try {
-      if (!user || !role) {
-        throw new Error('User tidak valid')
-      }
-
       if (role === 'guru') {
         const { error } = await supabase
           .from('gurus')
           .update({
             ...formData,
-            status: 'aktif',
+            status: 'aktif'
           })
           .eq('user_id', user.id)
 
@@ -290,31 +393,24 @@ export const useAuthStore = create((set, get) => ({
           .from('siswas')
           .update({
             ...formData,
-            status: 'aktif',
+            status: 'aktif'
           })
           .eq('user_id', user.id)
 
         if (error) throw error
       }
 
-      // Update status user global
+      // Update user status
       await supabase
         .from('users')
         .update({ status: 'active' })
         .eq('id', user.id)
 
-      set({
-        profile: {
-          ...(profile || {}),
-          ...formData,
-          status: 'aktif',
-        },
-      })
-
+      set({ profile: { ...get().profile, ...formData, status: 'aktif' } })
       return { success: true }
     } catch (error) {
       console.error('Onboarding error:', error)
       return { success: false, error: error.message }
     }
-  },
+  }
 }))
