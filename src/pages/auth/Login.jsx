@@ -21,30 +21,39 @@ const Login = () => {
     e.preventDefault()
     setIsLoading(true)
 
-    const result = await login(
-      formData.identifier,
-      formData.password,
-      formData.loginMethod
-    )
-    
-    if (result.success) {
-      if (result.needsOnboarding) {
-        navigate('/onboarding')
+    try {
+      const result = await login(
+        formData.identifier,
+        formData.password,
+        formData.loginMethod
+      )
+
+      if (result.success) {
+        if (result.needsOnboarding) {
+          // langsung ke onboarding jika backend menandai perlu melengkapi profil
+          navigate('/onboarding', { replace: true })
+          toast.success('Login berhasil — lengkapi data terlebih dahulu.')
+        } else {
+          // ke root; App.jsx akan memutuskan redirect final berdasarkan role/profile
+          navigate('/', { replace: true })
+          toast.success('Login berhasil!')
+        }
       } else {
-        toast.success('Login berhasil!')
+        toast.error(result.error || 'Login gagal')
       }
-    } else {
-      toast.error(result.error || 'Login gagal')
+    } catch (err) {
+      console.error('Login submit error:', err)
+      toast.error('Terjadi kesalahan saat proses login.')
+    } finally {
+      setIsLoading(false)
     }
-    
-    setIsLoading(false)
   }
 
   const setLoginMethod = (method) => {
     setFormData(prev => ({
       ...prev,
       loginMethod: method,
-      identifier: '' // reset field biar ga ke-mix
+      identifier: '' // reset field biar ga ke-mix antar metode
     }))
   }
 
@@ -170,23 +179,22 @@ const Login = () => {
           </div>
 
           <button
-  type="submit"
-  disabled={isLoading}
-  className="w-full bg-gradient-primary text-white py-3 px-4 rounded-lg font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
->
-  {isLoading ? 'Memproses...' : 'Masuk'}
-</button>
+            type="submit"
+            disabled={isLoading}
+            className="w-full bg-gradient-primary text-white py-3 px-4 rounded-lg font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
+          >
+            {isLoading ? 'Memproses...' : 'Masuk'}
+          </button>
 
-<p className="text-center text-gray-600 mt-4 text-sm">
-  Belum punya akun?{' '}
-  <Link
-    to="/register"
-    className="text-blue-600 hover:text-blue-700 font-medium"
-  >
-    Daftar di sini
-  </Link>
-</p>
-
+          <p className="text-center text-gray-600 mt-4 text-sm">
+            Belum punya akun?{' '}
+            <Link
+              to="/register"
+              className="text-blue-600 hover:text-blue-700 font-medium"
+            >
+              Daftar di sini
+            </Link>
+          </p>
         </form>
       </motion.div>
     </div>
