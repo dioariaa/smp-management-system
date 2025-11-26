@@ -7,12 +7,12 @@ import LoadingSpinner from '../../components/LoadingSpinner'
 
 // Pilihan nama kelas yang fix
 const CLASS_NAME_OPTIONS = [
-  { value: 'VII A', label: 'VII A' },
-  { value: 'VII B', label: 'VII B' },
-  { value: 'VIII A', label: 'VIII A' }, // interpretasi dari "VIIIA"
-  { value: 'VIII B', label: 'VIII B' }, // interpretasi dari "VIIIB"
-  { value: 'IX A', label: 'IX A' },
-  { value: 'IX B', label: 'IX B' },
+  { value: '7 1', label: '7 1' },
+  { value: '7 2', label: '7 2' },
+  { value: '8 1', label: '8 1' }, // interpretasi dari "VIIIA"
+  { value: '8 2', label: '8 2' }, // interpretasi dari "VIIIB"
+  { value: '9 1', label: '9 1' },
+  { value: '9 2', label: '9 2' },
 ]
 
 const emptyForm = {
