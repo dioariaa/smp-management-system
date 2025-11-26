@@ -1,3 +1,4 @@
+// src/pages/guru/InputNilai.jsx
 import React, { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import { supabase } from '../../supabase/supabaseClient'
@@ -31,7 +32,6 @@ const InputNilai = () => {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
 
-  // state untuk CRUD history
   const [editingId, setEditingId] = useState(null)
   const [editingNilai, setEditingNilai] = useState('')
 
@@ -41,7 +41,7 @@ const InputNilai = () => {
     return map
   }, [])
 
-  // Ambil guru + kelas + mapel dari jadwal
+  // 1. Ambil guru + kelas & mapel yang diajar dari jadwal
   useEffect(() => {
     const loadInitial = async () => {
       if (!user) {
@@ -53,20 +53,25 @@ const InputNilai = () => {
         setLoading(true)
         setError(null)
 
-        // 1. Guru berdasarkan user_id
+        // Guru berdasarkan user_id (pakai maybeSingle biar gak 406)
         const { data: guruRow, error: guruError } = await supabase
           .from('gurus')
           .select('id, first_name, last_name')
           .eq('user_id', user.id)
-          .single()
+          .maybeSingle()
 
-        if (guruError || !guruRow) {
+        if (guruError && guruError.code !== 'PGRST116') {
+          console.error('InputNilai guruError:', guruError)
+          throw new Error('Gagal mengambil data guru.')
+        }
+
+        if (!guruRow) {
           throw new Error('Data guru tidak ditemukan.')
         }
 
         setGuru(guruRow)
 
-        // 2. Ambil jadwal mengajar guru → kelas & mapel
+        // Ambil jadwal mengajar guru → kelas & mapel
         const { data: jadwalRows, error: jadwalError } = await supabase
           .from('jadwal')
           .select(`
@@ -77,7 +82,8 @@ const InputNilai = () => {
           .eq('guru_id', guruRow.id)
 
         if (jadwalError) {
-          throw jadwalError
+          console.error('InputNilai jadwalError:', jadwalError)
+          throw new Error('Gagal mengambil jadwal guru.')
         }
 
         const kelasMap = new Map()
@@ -94,7 +100,7 @@ const InputNilai = () => {
 
         const kelasList = Array.from(kelasMap.entries()).map(([id, nama]) => ({
           id,
-          nama
+          nama,
         }))
 
         setClasses(kelasList)
@@ -115,6 +121,7 @@ const InputNilai = () => {
     }
 
     loadInitial()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user])
 
   const classMap = useMemo(() => {
@@ -125,7 +132,7 @@ const InputNilai = () => {
     return map
   }, [classes])
 
-  // Ambil siswa untuk kelas terpilih
+  // 2. Ambil siswa untuk kelas terpilih
   useEffect(() => {
     const loadStudents = async () => {
       if (!selectedClass) {
@@ -144,7 +151,10 @@ const InputNilai = () => {
           .eq('kelas_id', selectedClass)
           .order('first_name', { ascending: true })
 
-        if (siswaError) throw siswaError
+        if (siswaError) {
+          console.error('loadStudents siswaError:', siswaError)
+          throw new Error('Gagal mengambil daftar siswa.')
+        }
 
         setStudents(siswaRows || [])
 
@@ -164,7 +174,7 @@ const InputNilai = () => {
     loadStudents()
   }, [selectedClass])
 
-  // Ambil riwayat nilai untuk kombinasi (kelas, mapel, tipe)
+  // 3. Ambil riwayat nilai untuk kombinasi (guru, kelas, mapel, tipe)
   useEffect(() => {
     const loadHistory = async () => {
       if (!guru || !selectedClass || !selectedSubject) {
@@ -203,7 +213,7 @@ const InputNilai = () => {
 
         if (error) {
           console.error('loadHistory error:', error)
-          throw error
+          throw new Error('Gagal mengambil riwayat nilai.')
         }
 
         setGradeHistory(data || [])
@@ -224,7 +234,7 @@ const InputNilai = () => {
     const value = nilaiStr.replace(/[^\d]/g, '')
     setNilaiMap((prev) => ({
       ...prev,
-      [siswaId]: value
+      [siswaId]: value,
     }))
   }
 
@@ -246,8 +256,9 @@ const InputNilai = () => {
       return
     }
 
-    const entries = Object.entries(nilaiMap)
-      .filter(([_, v]) => v !== '' && v != null)
+    const entries = Object.entries(nilaiMap).filter(
+      ([_, v]) => v !== '' && v != null
+    )
 
     if (!entries.length) {
       toast.error('Masukkan minimal satu nilai siswa.')
@@ -266,16 +277,14 @@ const InputNilai = () => {
         mapel: selectedSubject,
         nilai: Number(nilaiStr),
         tanggal: today,
-        tipe: selectedTipe
+        tipe: selectedTipe,
       }))
 
-      const { error } = await supabase
-        .from('grades')
-        .insert(payload)
+      const { error } = await supabase.from('grades').insert(payload)
 
       if (error) {
         console.error('insert grades error:', error)
-        throw error
+        throw new Error('Gagal menyimpan nilai ke database.')
       }
 
       toast.success('Nilai berhasil disimpan.')
@@ -312,7 +321,7 @@ const InputNilai = () => {
       }
     } catch (err) {
       console.error('handleSave error:', err)
-      toast.error('Gagal menyimpan nilai.')
+      toast.error(err.message || 'Gagal menyimpan nilai.')
     } finally {
       setSaving(false)
     }
@@ -356,7 +365,7 @@ const InputNilai = () => {
 
       if (error) {
         console.error('update grade error:', error)
-        throw error
+        throw new Error('Gagal memperbarui nilai di database.')
       }
 
       toast.success('Nilai berhasil diperbarui.')
@@ -371,7 +380,7 @@ const InputNilai = () => {
       setEditingNilai('')
     } catch (err) {
       console.error('saveEdit error:', err)
-      toast.error('Gagal memperbarui nilai.')
+      toast.error(err.message || 'Gagal memperbarui nilai.')
     }
   }
 
@@ -382,14 +391,11 @@ const InputNilai = () => {
     if (!ok) return
 
     try {
-      const { error } = await supabase
-        .from('grades')
-        .delete()
-        .eq('id', id)
+      const { error } = await supabase.from('grades').delete().eq('id', id)
 
       if (error) {
         console.error('delete grade error:', error)
-        throw error
+        throw new Error('Gagal menghapus nilai dari database.')
       }
 
       toast.success('Nilai berhasil dihapus.')
@@ -401,7 +407,7 @@ const InputNilai = () => {
       }
     } catch (err) {
       console.error('deleteGrade error:', err)
-      toast.error('Gagal menghapus nilai.')
+      toast.error(err.message || 'Gagal menghapus nilai.')
     }
   }
 
@@ -534,14 +540,14 @@ const InputNilai = () => {
                       <td className="py-2 px-3">
                         {s.first_name} {s.last_name || ''}
                       </td>
-                      <td className="py-2 px-3">
-                        {s.nisn || '-'}
-                      </td>
+                      <td className="py-2 px-3">{s.nisn || '-'}</td>
                       <td className="py-2 px-3">
                         <input
                           type="text"
                           value={nilaiMap[s.id] ?? ''}
-                          onChange={(e) => handleNilaiChange(s.id, e.target.value)}
+                          onChange={(e) =>
+                            handleNilaiChange(s.id, e.target.value)
+                          }
                           className="w-20 border border-gray-300 rounded-lg px-2 py-1 text-xs md:text-sm"
                           placeholder="0-100"
                           maxLength={3}
@@ -567,7 +573,7 @@ const InputNilai = () => {
         )}
       </motion.div>
 
-      {/* Riwayat Nilai untuk kombinasi terpilih + CRUD */}
+      {/* Riwayat Nilai */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -575,7 +581,8 @@ const InputNilai = () => {
       >
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-semibold text-gray-900">
-            Riwayat Nilai – {classMap.get(selectedClass) || '-'} / {selectedSubject || '-'} / {tipeLabelMap[selectedTipe] || '-'}
+            Riwayat Nilai – {classMap.get(selectedClass) || '-'} /{' '}
+            {selectedSubject || '-'} / {tipeLabelMap[selectedTipe] || '-'}
           </h2>
         </div>
 
@@ -600,7 +607,9 @@ const InputNilai = () => {
               </thead>
               <tbody>
                 {gradeHistory.map((row) => {
-                  const nama = `${row.siswa?.first_name || ''} ${row.siswa?.last_name || ''}`.trim()
+                  const nama = `${row.siswa?.first_name || ''} ${
+                    row.siswa?.last_name || ''
+                  }`.trim()
                   const isEditing = editingId === row.id
 
                   return (
@@ -611,7 +620,9 @@ const InputNilai = () => {
                           : '-'}
                       </td>
                       <td className="py-2 px-3">{nama || '-'}</td>
-                      <td className="py-2 px-3">{row.siswa?.nisn || '-'}</td>
+                      <td className="py-2 px-3">
+                        {row.siswa?.nisn || '-'}
+                      </td>
                       <td className="py-2 px-3">
                         {tipeLabelMap[row.tipe] || row.tipe || '-'}
                       </td>
@@ -620,7 +631,9 @@ const InputNilai = () => {
                           <input
                             type="text"
                             value={editingNilai}
-                            onChange={(e) => handleHistoryNilaiChange(e.target.value)}
+                            onChange={(e) =>
+                              handleHistoryNilaiChange(e.target.value)
+                            }
                             className="w-16 border border-gray-300 rounded-lg px-2 py-1 text-xs"
                             maxLength={3}
                           />

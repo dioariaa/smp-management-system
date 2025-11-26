@@ -3,17 +3,23 @@ import { supabase } from '../supabase/supabaseClient'
 
 // Ambil semua absensi siswa per bulan
 export const fetchSiswaAttendanceByMonth = async (userId, year, month) => {
-  if (!userId || !year || !month) return { siswaId: null, records: [] }
+  if (!userId || !year || !month) {
+    return { siswaId: null, records: [] }
+  }
 
   // Cari siswa_id dari user_id
   const { data: siswa, error: siswaError } = await supabase
     .from('siswas')
     .select('id')
     .eq('user_id', userId)
-    .single()
+    .maybeSingle() // <--- anti 406
 
-  if (siswaError || !siswa) {
+  if (siswaError && siswaError.code !== 'PGRST116') {
     console.error('fetchSiswaAttendanceByMonth siswaError:', siswaError)
+    throw new Error('Gagal mengambil data siswa')
+  }
+
+  if (!siswa) {
     throw new Error('Data siswa tidak ditemukan')
   }
 
@@ -36,7 +42,7 @@ export const fetchSiswaAttendanceByMonth = async (userId, year, month) => {
 
   if (error) {
     console.error('fetchSiswaAttendanceByMonth error:', error)
-    throw error
+    throw new Error('Gagal mengambil data absensi')
   }
 
   return {

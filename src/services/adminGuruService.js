@@ -16,8 +16,6 @@ export const fetchGurus = async () => {
 }
 
 export const createGuru = async (payload) => {
-  // payload harus sudah mengandung:
-  // nip, first_name, last_name, email, phone, status, mapel
   const { data, error } = await supabase
     .from('gurus')
     .insert({
@@ -27,7 +25,7 @@ export const createGuru = async (payload) => {
       email: payload.email,
       phone: payload.phone,
       status: payload.status,
-      mapel: payload.mapel,       // <--- penting
+      mapel: payload.mapel, // <--- sama dengan DB
     })
     .select()
     .single()
@@ -50,7 +48,7 @@ export const updateGuru = async (id, payload) => {
       email: payload.email,
       phone: payload.phone,
       status: payload.status,
-      mapel: payload.mapel,       // <--- penting
+      mapel: payload.mapel, // <--- sama
     })
     .eq('id', id)
     .select()

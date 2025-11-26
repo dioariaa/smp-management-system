@@ -1,8 +1,19 @@
+// src/pages/admin/ManajemenKelas.jsx
 import React, { useState } from 'react'
 import { motion } from 'framer-motion'
 import { Plus, Edit2, Trash2 } from 'lucide-react'
 import { useAdminKelas } from '../../hooks/useAdminKelas'
 import LoadingSpinner from '../../components/LoadingSpinner'
+
+// Pilihan nama kelas yang fix
+const CLASS_NAME_OPTIONS = [
+  { value: 'VII A', label: 'VII A' },
+  { value: 'VII B', label: 'VII B' },
+  { value: 'VIII A', label: 'VIII A' }, // interpretasi dari "VIIIA"
+  { value: 'VIII B', label: 'VIII B' }, // interpretasi dari "VIIIB"
+  { value: 'IX A', label: 'IX A' },
+  { value: 'IX B', label: 'IX B' },
+]
 
 const emptyForm = {
   nama: '',
@@ -33,15 +44,32 @@ const ManajemenKelas = () => {
     e.preventDefault()
     try {
       if (!form.nama) {
-        alert('Nama kelas wajib diisi')
+        alert('Nama kelas wajib dipilih')
         return
       }
-      setSubmitting(true)
-      if (editingId) {
-        await editClass(editingId, form)
-      } else {
-        await addClass(form)
+
+      // Cegah duplikat nama kelas
+      const isDuplicate = classes.some(
+        (k) => k.nama === form.nama && k.id !== editingId
+      )
+      if (isDuplicate) {
+        alert('Nama kelas sudah ada. Gunakan nama lain.')
+        return
       }
+
+      setSubmitting(true)
+
+      const payload = {
+        nama: form.nama,
+        wali_guru_id: form.wali_guru_id || null,
+      }
+
+      if (editingId) {
+        await editClass(editingId, payload)
+      } else {
+        await addClass(payload)
+      }
+
       setForm(emptyForm)
       setEditingId(null)
     } catch (err) {
@@ -88,7 +116,7 @@ const ManajemenKelas = () => {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Manajemen Kelas</h1>
           <p className="text-gray-600 mt-1">
-            Kelola daftar kelas dan wali kelas
+            Kelola daftar kelas dan wali kelas.
           </p>
         </div>
       </motion.div>
@@ -109,21 +137,28 @@ const ManajemenKelas = () => {
           onSubmit={handleSubmit}
           className="grid grid-cols-1 md:grid-cols-3 gap-4"
         >
+          {/* Nama kelas (dropdown) */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Nama Kelas
             </label>
-            <input
-              type="text"
+            <select
               name="nama"
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
               value={form.nama}
               onChange={handleChange}
-              placeholder="Misal: X IPA 1"
               required
-            />
+            >
+              <option value="">Pilih nama kelas</option>
+              {CLASS_NAME_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
           </div>
 
+          {/* Wali kelas */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Wali Kelas

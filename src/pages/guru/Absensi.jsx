@@ -7,14 +7,14 @@ import LoadingSpinner from '../../components/LoadingSpinner'
 import toast from 'react-hot-toast'
 import {
   fetchDailyAttendance,
-  downloadAttendanceAsCsv
+  downloadAttendanceAsCsv,
 } from '../../services/attendanceExportService'
 
 const STATUS_OPTIONS = [
   { value: 'hadir', label: 'Hadir' },
   { value: 'izin', label: 'Izin' },
   { value: 'sakit', label: 'Sakit' },
-  { value: 'alpa', label: 'Alpa' }
+  { value: 'alpa', label: 'Alpa' },
 ]
 
 const Absensi = () => {
@@ -33,7 +33,7 @@ const Absensi = () => {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
 
-  // 1. Ambil guru + kelas yang diajar
+  // 1. Ambil guru + list kelas dari jadwal
   useEffect(() => {
     const loadGuruAndClasses = async () => {
       if (!user) {
@@ -50,10 +50,15 @@ const Absensi = () => {
           .from('gurus')
           .select('id, first_name, last_name')
           .eq('user_id', user.id)
-          .single()
+          .maybeSingle()
 
-        if (guruError || !guruRow) {
-          throw new Error('Data guru tidak ditemukan')
+        if (guruError && guruError.code !== 'PGRST116') {
+          console.error('Absensi guruError:', guruError)
+          throw new Error('Gagal mengambil data guru.')
+        }
+
+        if (!guruRow) {
+          throw new Error('Data guru tidak ditemukan.')
         }
 
         setGuru(guruRow)
@@ -65,7 +70,8 @@ const Absensi = () => {
           .eq('guru_id', guruRow.id)
 
         if (jadwalError) {
-          throw jadwalError
+          console.error('Absensi jadwalError:', jadwalError)
+          throw new Error('Gagal mengambil jadwal guru.')
         }
 
         const kelasIds = Array.from(
@@ -85,11 +91,12 @@ const Absensi = () => {
           .in('id', kelasIds)
 
         if (kelasError) {
-          throw kelasError
+          console.error('Absensi kelasError:', kelasError)
+          throw new Error('Gagal mengambil data kelas.')
         }
 
         setClasses(kelasRows || [])
-        // Auto pilih kelas pertama kalau ada
+
         if (!selectedClass && kelasRows && kelasRows.length > 0) {
           setSelectedClass(kelasRows[0].id)
         }
@@ -102,6 +109,7 @@ const Absensi = () => {
     }
 
     loadGuruAndClasses()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user])
 
   const classMap = useMemo(() => {
@@ -129,7 +137,8 @@ const Absensi = () => {
           .order('first_name', { ascending: true })
 
         if (siswaError) {
-          throw siswaError
+          console.error('Absensi siswaError:', siswaError)
+          throw new Error('Gagal mengambil daftar siswa.')
         }
 
         setStudents(siswaRows || [])
@@ -142,7 +151,8 @@ const Absensi = () => {
           .eq('date', selectedDate)
 
         if (attendanceError) {
-          throw attendanceError
+          console.error('Absensi attendanceError:', attendanceError)
+          throw new Error('Gagal mengambil data absensi.')
         }
 
         const map = {}
@@ -166,7 +176,7 @@ const Absensi = () => {
   const handleChangeStatus = (siswaId, status) => {
     setAttendanceMap((prev) => ({
       ...prev,
-      [siswaId]: status
+      [siswaId]: status,
     }))
   }
 
@@ -186,26 +196,23 @@ const Absensi = () => {
 
       const tanggal = selectedDate.slice(0, 10)
 
-      // Payload untuk UPSERT:
-      // constraint di DB: attendance_unique_siswa_date (UNIQUE (siswa_id, date))
-      // jadi onConflict HARUS persis 'siswa_id,date'
       const payload = students.map((s) => ({
         guru_id: guru.id,
         siswa_id: s.id,
         kelas_id: selectedClass,
         date: tanggal,
-        status: attendanceMap[s.id] || 'hadir'
+        status: attendanceMap[s.id] || 'hadir',
       }))
 
       const { error: upsertError } = await supabase
         .from('attendance')
         .upsert(payload, {
-          onConflict: 'siswa_id,date'
+          onConflict: 'siswa_id,date',
         })
 
       if (upsertError) {
         console.error('save attendance upsert error:', upsertError)
-        throw upsertError
+        throw new Error('Gagal menyimpan absensi ke database.')
       }
 
       toast.success('Absensi berhasil disimpan / diperbarui.')
@@ -227,7 +234,7 @@ const Absensi = () => {
       }
     } catch (err) {
       console.error('handleSave error:', err)
-      toast.error('Gagal menyimpan absensi.')
+      toast.error(err.message || 'Gagal menyimpan absensi.')
     } finally {
       setSaving(false)
     }
@@ -247,7 +254,7 @@ const Absensi = () => {
       const rows = await fetchDailyAttendance({
         guruId: guru.id,
         date: selectedDate,
-        kelasId: selectedClass || null
+        kelasId: selectedClass || null,
       })
 
       if (!rows.length) {
@@ -262,13 +269,13 @@ const Absensi = () => {
       downloadAttendanceAsCsv({
         rows,
         date: selectedDate,
-        kelasName
+        kelasName,
       })
 
       toast.success('Absensi berhasil diekspor.')
     } catch (err) {
       console.error('Export absensi error:', err)
-      toast.error('Gagal mengekspor absensi.')
+      toast.error(err.message || 'Gagal mengekspor absensi.')
     }
   }
 
@@ -362,9 +369,7 @@ const Absensi = () => {
         className="bg-white rounded-xl shadow-sm p-4"
       >
         {!selectedClass ? (
-          <p className="text-sm text-gray-500">
-            Pilih kelas terlebih dahulu.
-          </p>
+          <p className="text-sm text-gray-500">Pilih kelas terlebih dahulu.</p>
         ) : !students.length ? (
           <p className="text-sm text-gray-500">
             Tidak ada siswa di kelas ini.
@@ -386,9 +391,7 @@ const Absensi = () => {
                       <td className="py-2 px-3">
                         {s.first_name} {s.last_name || ''}
                       </td>
-                      <td className="py-2 px-3">
-                        {s.nisn || '-'}
-                      </td>
+                      <td className="py-2 px-3">{s.nisn || '-'}</td>
                       <td className="py-2 px-3">
                         <select
                           value={attendanceMap[s.id] || ''}

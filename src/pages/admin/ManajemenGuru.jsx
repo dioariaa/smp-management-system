@@ -6,6 +6,8 @@ import { useAdminGuru } from '../../hooks/useAdminGuru'
 import LoadingSpinner from '../../components/LoadingSpinner'
 import { SUBJECT_OPTIONS } from '../../constants/subjects'
 
+// Kolom di DB: mapel (TEXT) di tabel public.gurus
+
 const emptyForm = {
   nip: '',
   first_name: '',
@@ -13,11 +15,19 @@ const emptyForm = {
   email: '',
   phone: '',
   status: 'aktif',
-  mapel: '',        // <--- TAMBAH INI
+  mapel: '', // <--- SAMA dengan kolom DB
 }
 
 const ManajemenGuru = () => {
-  const { gurus, loading, error, addGuru, editGuru, removeGuru } = useAdminGuru()
+  const {
+    gurus,
+    loading,
+    error,
+    addGuru,
+    editGuru,
+    removeGuru,
+  } = useAdminGuru()
+
   const [form, setForm] = useState(emptyForm)
   const [editingId, setEditingId] = useState(null)
   const [submitting, setSubmitting] = useState(false)
@@ -29,21 +39,32 @@ const ManajemenGuru = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+
     try {
       setSubmitting(true)
 
-      // Validasi minimal: mapel wajib
-      if (!form.mapel) {
-        alert('Pilih mata pelajaran yang diajar guru.')
-        setSubmitting(false)
+      // Validasi minimal
+      if (!form.nip || !form.first_name) {
+        alert('NIP dan nama depan wajib diisi.')
         return
       }
 
-      if (editingId) {
-        await editGuru(editingId, form)
-      } else {
-        await addGuru(form)
+      const payload = {
+        nip: form.nip.trim(),
+        first_name: form.first_name.trim(),
+        last_name: form.last_name.trim() || null,
+        email: form.email.trim() || null,
+        phone: form.phone.trim() || null,
+        status: form.status || 'aktif',
+        mapel: form.mapel || null, // <--- PAKAI mapel
       }
+
+      if (editingId) {
+        await editGuru(editingId, payload)
+      } else {
+        await addGuru(payload)
+      }
+
       setForm(emptyForm)
       setEditingId(null)
     } catch (err) {
@@ -63,7 +84,7 @@ const ManajemenGuru = () => {
       email: guru.email || '',
       phone: guru.phone || '',
       status: guru.status || 'aktif',
-      mapel: guru.mapel || '',    // <--- BACA MAPEL SAAT EDIT
+      mapel: guru.mapel || '', // <--- PAKAI mapel
     })
   }
 
@@ -95,7 +116,7 @@ const ManajemenGuru = () => {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Manajemen Guru</h1>
           <p className="text-gray-600 mt-1">
-            Kelola data guru yang terdaftar di sistem
+            Kelola data guru yang terdaftar di sistem. Guru akan membuat password sendiri lewat halaman registrasi.
           </p>
         </div>
       </motion.div>
@@ -116,6 +137,7 @@ const ManajemenGuru = () => {
           onSubmit={handleSubmit}
           className="grid grid-cols-1 md:grid-cols-3 gap-4"
         >
+          {/* NIP */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               NIP
@@ -130,6 +152,7 @@ const ManajemenGuru = () => {
             />
           </div>
 
+          {/* Nama Depan */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Nama Depan
@@ -144,6 +167,7 @@ const ManajemenGuru = () => {
             />
           </div>
 
+          {/* Nama Belakang */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Nama Belakang
@@ -157,9 +181,10 @@ const ManajemenGuru = () => {
             />
           </div>
 
+          {/* Email */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Email
+              Email (opsional)
             </label>
             <input
               type="email"
@@ -167,12 +192,14 @@ const ManajemenGuru = () => {
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
               value={form.email}
               onChange={handleChange}
+              placeholder="guru@sekolah.sch.id"
             />
           </div>
 
+          {/* No HP */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              No. HP
+              No. HP (opsional)
             </label>
             <input
               type="text"
@@ -180,29 +207,11 @@ const ManajemenGuru = () => {
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
               value={form.phone}
               onChange={handleChange}
+              placeholder="08xxxxxxxxxx"
             />
           </div>
 
-          {/* MAPEL DROPDOWN */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Mata Pelajaran
-            </label>
-            <select
-              name="mapel"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-              value={form.mapel}
-              onChange={handleChange}
-            >
-              <option value="">Pilih mata pelajaran</option>
-              {SUBJECT_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
+          {/* Status */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Status
@@ -218,6 +227,27 @@ const ManajemenGuru = () => {
             </select>
           </div>
 
+          {/* Mapel Utama */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Mata Pelajaran Utama
+            </label>
+            <select
+              name="mapel" // <--- name = mapel
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+              value={form.mapel} // <--- value = form.mapel
+              onChange={handleChange}
+            >
+              <option value="">Pilih mapel</option>
+              {SUBJECT_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Tombol submit */}
           <div className="md:col-span-3 flex gap-2 mt-2">
             <button
               type="submit"
@@ -262,7 +292,7 @@ const ManajemenGuru = () => {
               <tr className="border-b bg-gray-50">
                 <th className="text-left py-2 px-3">NIP</th>
                 <th className="text-left py-2 px-3">Nama</th>
-                <th className="text-left py-2 px-3">Mapel</th>
+                <th className="text-left py-2 px-3">Mapel Utama</th>
                 <th className="text-left py-2 px-3">Email</th>
                 <th className="text-left py-2 px-3">No. HP</th>
                 <th className="text-left py-2 px-3">Status</th>
@@ -287,10 +317,10 @@ const ManajemenGuru = () => {
                     {g.first_name} {g.last_name || ''}
                   </td>
                   <td className="py-2 px-3">
-                    {g.mapel || '-'}
+                    {g.mapel || '-'} {/* <--- baca kolom mapel */}
                   </td>
-                  <td className="py-2 px-3">{g.email}</td>
-                  <td className="py-2 px-3">{g.phone}</td>
+                  <td className="py-2 px-3">{g.email || '-'}</td>
+                  <td className="py-2 px-3">{g.phone || '-'}</td>
                   <td className="py-2 px-3 capitalize">
                     <span
                       className={`inline-flex px-2 py-1 rounded-full text-xs ${

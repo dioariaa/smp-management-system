@@ -1,8 +1,10 @@
+// src/pages/admin/ManajemenSiswa.jsx
 import React, { useState } from 'react'
 import { motion } from 'framer-motion'
 import { Plus, Edit2, Trash2 } from 'lucide-react'
 import { useAdminSiswa } from '../../hooks/useAdminSiswa'
 import LoadingSpinner from '../../components/LoadingSpinner'
+import toast from 'react-hot-toast'
 
 const emptyForm = {
   nisn: '',
@@ -15,15 +17,8 @@ const emptyForm = {
 }
 
 const ManajemenSiswa = () => {
-  const {
-    siswas,
-    classes,
-    loading,
-    error,
-    addSiswa,
-    editSiswa,
-    removeSiswa,
-  } = useAdminSiswa()
+  const { siswas, classes, loading, error, addSiswa, editSiswa, removeSiswa } =
+    useAdminSiswa()
 
   const [form, setForm] = useState(emptyForm)
   const [editingId, setEditingId] = useState(null)
@@ -37,21 +32,37 @@ const ManajemenSiswa = () => {
   const handleSubmit = async (e) => {
     e.preventDefault()
     try {
-      if (!form.kelas_id) {
-        alert('Pilih kelas terlebih dahulu')
+      setSubmitting(true)
+
+      // Validasi minimal
+      if (!form.nisn || !form.first_name) {
+        toast.error('NISN dan nama depan wajib diisi.')
         return
       }
-      setSubmitting(true)
-      if (editingId) {
-        await editSiswa(editingId, form)
-      } else {
-        await addSiswa(form)
+
+      const payload = {
+        nisn: form.nisn.trim(),
+        first_name: form.first_name.trim(),
+        last_name: form.last_name.trim() || null,
+        email: form.email.trim() || null,
+        phone: form.phone.trim() || null,
+        kelas_id: form.kelas_id || null,
+        status: form.status || 'aktif',
       }
+
+      if (editingId) {
+        await editSiswa(editingId, payload)
+        toast.success('Data siswa berhasil diperbarui.')
+      } else {
+        await addSiswa(payload)
+        toast.success('Siswa baru berhasil ditambahkan.')
+      }
+
       setForm(emptyForm)
       setEditingId(null)
     } catch (err) {
       console.error(err)
-      alert(err.message || 'Gagal menyimpan data siswa')
+      toast.error(err.message || 'Gagal menyimpan data siswa.')
     } finally {
       setSubmitting(false)
     }
@@ -79,9 +90,10 @@ const ManajemenSiswa = () => {
     if (!window.confirm('Hapus siswa ini?')) return
     try {
       await removeSiswa(id)
+      toast.success('Siswa berhasil dihapus.')
     } catch (err) {
       console.error(err)
-      alert(err.message || 'Gagal menghapus siswa')
+      toast.error(err.message || 'Gagal menghapus siswa.')
     }
   }
 
@@ -98,7 +110,8 @@ const ManajemenSiswa = () => {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Manajemen Siswa</h1>
           <p className="text-gray-600 mt-1">
-            Kelola data siswa dan pengelompokan kelas
+            Kelola data siswa yang terdaftar di sistem. Siswa akan membuat akun
+            login sendiri menggunakan NISN melalui halaman registrasi.
           </p>
         </div>
       </motion.div>
@@ -119,6 +132,7 @@ const ManajemenSiswa = () => {
           onSubmit={handleSubmit}
           className="grid grid-cols-1 md:grid-cols-3 gap-4"
         >
+          {/* NISN */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               NISN
@@ -133,6 +147,7 @@ const ManajemenSiswa = () => {
             />
           </div>
 
+          {/* Nama Depan */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Nama Depan
@@ -147,6 +162,7 @@ const ManajemenSiswa = () => {
             />
           </div>
 
+          {/* Nama Belakang */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Nama Belakang
@@ -160,9 +176,10 @@ const ManajemenSiswa = () => {
             />
           </div>
 
+          {/* Email */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Email
+              Email (opsional)
             </label>
             <input
               type="email"
@@ -173,9 +190,10 @@ const ManajemenSiswa = () => {
             />
           </div>
 
+          {/* No HP */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              No. HP
+              No. HP (opsional)
             </label>
             <input
               type="text"
@@ -186,6 +204,7 @@ const ManajemenSiswa = () => {
             />
           </div>
 
+          {/* Kelas */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Kelas
@@ -195,7 +214,6 @@ const ManajemenSiswa = () => {
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
               value={form.kelas_id}
               onChange={handleChange}
-              required
             >
               <option value="">Pilih Kelas</option>
               {classes.map((k) => (
@@ -206,6 +224,7 @@ const ManajemenSiswa = () => {
             </select>
           </div>
 
+          {/* Status */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Status
@@ -221,6 +240,7 @@ const ManajemenSiswa = () => {
             </select>
           </div>
 
+          {/* Tombol submit */}
           <div className="md:col-span-3 flex gap-2 mt-2">
             <button
               type="submit"
@@ -283,18 +303,15 @@ const ManajemenSiswa = () => {
                   </td>
                 </tr>
               )}
-
               {siswas.map((s) => (
                 <tr key={s.id} className="border-b last:border-0">
                   <td className="py-2 px-3">{s.nisn}</td>
                   <td className="py-2 px-3">
                     {s.first_name} {s.last_name || ''}
                   </td>
-                  <td className="py-2 px-3">
-                    {s.kelas?.nama || '-'}
-                  </td>
-                  <td className="py-2 px-3">{s.email}</td>
-                  <td className="py-2 px-3">{s.phone}</td>
+                  <td className="py-2 px-3">{s.kelas_nama || '-'}</td>
+                  <td className="py-2 px-3">{s.email || '-'}</td>
+                  <td className="py-2 px-3">{s.phone || '-'}</td>
                   <td className="py-2 px-3 capitalize">
                     <span
                       className={`inline-flex px-2 py-1 rounded-full text-xs ${
