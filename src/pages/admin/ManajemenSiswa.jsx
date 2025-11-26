@@ -309,7 +309,7 @@ const ManajemenSiswa = () => {
                   <td className="py-2 px-3">
                     {s.first_name} {s.last_name || ''}
                   </td>
-                  <td className="py-2 px-3">{s.kelas_nama || '-'}</td>
+<td className="py-2 px-3">{s.kelas?.nama || '-'}</td>
                   <td className="py-2 px-3">{s.email || '-'}</td>
                   <td className="py-2 px-3">{s.phone || '-'}</td>
                   <td className="py-2 px-3 capitalize">

@@ -58,12 +58,7 @@ export default function HomePage() {
 
         <div className="text-center my-8">
           <h2 className="text-2xl font-bold mb-3">Sambutan Kepala Sekolah</h2>
-          <img
-            src="/img/kepsek.jpg"
-            alt="kepsek"
-            className="w-24 h-24 md:w-28 md:h-28 rounded-full mx-auto mb-4 object-cover border"
-            onClick={() => setLightboxSrc('/img/kepsek.jpg')}
-          />
+          
           <p className="mx-auto max-w-3xl text-gray-600 leading-relaxed">
             “Selamat datang di website resmi <strong>SMP PGRI 35 Serpong</strong>. Website ini hadir
             sebagai sarana informasi dan komunikasi untuk mendukung kegiatan pendidikan.”
@@ -75,10 +70,8 @@ export default function HomePage() {
       <section>
         <h1 className="text-3xl font-bold mb-6 text-center">Profil Sekolah</h1>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <Card className="p-0 overflow-hidden">
-            <img src="https://lh4.googleusercontent.com/proxy/5MJmBvqLlZh051Fpsxri39u0aAdKmd7Jkhqsi_Ah744hq_xa0WbCpjKmB1NPPImYipUfTmyHUTIbekwN_NJtgRkKVpyNyTdFTFLFsKap4rqN_AJYRg3dAuwNydNg1Nu43ev4XQkVrjE8qEiLLdEOtBRht7kjTlgK" alt="sekolah" className="w-full h-56 object-cover" />
-          </Card>
+        <div className="grid grid-cols-1 md:grid-cols-1 gap-6">
+          
 
           <div className="space-y-4">
             <Card>
@@ -122,9 +115,7 @@ export default function HomePage() {
         <h1 className="text-3xl font-bold mb-6 text-center">Struktur Organisasi</h1>
         <div className="flex flex-col items-center gap-6">
           <div className="bg-white p-4 rounded-xl shadow-sm border w-full md:w-96 text-center">
-            <img src="/img/kepsek.jpg" alt="kepsek" className="w-20 h-20 rounded-full mx-auto mb-3 object-cover" />
             <b>Kepala Sekolah</b>
-            <div className="text-sm text-gray-600">Heris Samekto, S.Pd, MM</div>
           </div>
 
           <div className="w-full md:w-[720px] grid grid-cols-1 md:grid-cols-4 gap-4">
