@@ -13,7 +13,7 @@ import {
 } from 'recharts'
 import LoadingSpinner from './LoadingSpinner'
 
-const TARGET_CLASSES_ORDER = ['VII A', 'VII B', 'VIII A', 'VIII B', 'IX A', 'IX B']
+const TARGET_CLASSES_ORDER = ['7 1', '7 2', '8 1', '8 2', '9 1', '9 2']
 
 const GradeChart = () => {
   const [data, setData] = useState([])
